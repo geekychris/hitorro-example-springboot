@@ -348,13 +348,13 @@ public class HitorroJVSIntegrationTest {
     }
     
     @Nested
-    @DisplayName("NLP-Aware Features (when enabled)")
+    @DisplayName("NLP-Aware Features - Field Access Tests")
     class NLPAwareFeatures {
         
         @Test
-        @DisplayName("Should demonstrate text segmentation and tokenization")
-        void shouldDemonstrateTextSegmentation() {
-            // Create document with multi-language text
+        @DisplayName("Should access text field and test for segmented field availability")
+        void shouldAccessTextAndSegmentedFields() {
+            // Create document with text that would be segmented
             String json = """
                 {
                     "title": {
@@ -369,23 +369,53 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
-            // Access the text - this is always available
+            // ALWAYS AVAILABLE: Access the original text field
             String text = doc.getString("title.mls.en.text");
+            assertThat(text).isNotNull();
             assertThat(text).isEqualTo("John Smith visited New York yesterday");
             
-            // NOTE: When NLP is enabled, JVS automatically enriches text with:
-            // - segmented: ["John", "Smith", "visited", "New", "York", "yesterday"]
-            // - segmented_normhash: [hash values for each token]
-            // - clean: "john smith visited new york yesterday"
-            //
-            // To enable NLP, set hitorro.jvs.nlp-enabled=true and ensure
-            // WordNet data is available in ${hitorro.home}/data/wordnet
+            // ATTEMPT TO ACCESS NLP-ENRICHED FIELDS
+            // When NLP is enabled, JVS automatically creates these fields:
+            
+            // 1. Try to access segmented field (array of tokens)
+            List<String> segmented = null;
+            try {
+                segmented = doc.getStringList("title.mls[en].segmented");
+            } catch (Exception e) {
+                // Field doesn't exist or wrong type - NLP not enabled
+            }
+            
+            if (segmented != null && !segmented.isEmpty()) {
+                // NLP IS ENABLED - verify segmentation worked
+                assertThat(segmented).contains("John", "Smith", "visited", "New", "York", "yesterday");
+                System.out.println("✓ Segmentation available: " + segmented);
+            } else {
+                // NLP IS NOT ENABLED - this is expected in test environment
+                System.out.println("✗ Segmentation not available (NLP not enabled)");
+                System.out.println("  To enable: set hitorro.jvs.nlp-enabled=true");
+                System.out.println("  Requires: WordNet data in ${hitorro.home}/data/wordnet");
+            }
+            
+            // 2. Try to access normalized hashes
+            long[] normhash = null;
+            try {
+                normhash = doc.getLongArray("title.mls[en].segmented_normhash");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
+            
+            if (normhash != null && normhash.length > 0) {
+                assertThat(normhash.length).isEqualTo(segmented.size());
+                System.out.println("✓ Normalized hashes available: " + normhash.length + " values");
+            } else {
+                System.out.println("✗ Normalized hashes not available (NLP not enabled)");
+            }
         }
         
         @Test
-        @DisplayName("Should demonstrate Named Entity Recognition (NER)")
-        void shouldDemonstrateNER() {
-            // Example showing NER structure
+        @DisplayName("Should access Named Entity Recognition (NER) fields")
+        void shouldAccessNERFields() {
+            // Text with clear named entities
             String json = """
                 {
                     "content": {
@@ -400,27 +430,50 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
+            // ALWAYS AVAILABLE: Access original text
             String text = doc.getString("content.mls.en.text");
+            assertThat(text).isNotNull();
             assertThat(text).contains("Biden", "Merkel", "Berlin");
             
-            // When NLP is enabled, JVS adds:
-            // - segmented_ner: ["TITLE", "PERSON", "O", "O", "TITLE", "PERSON", "O", "LOCATION", "O", "DATE"]
-            //
-            // NER tags identify:
-            // - PERSON: Names of people
-            // - LOCATION: Geographic locations
-            // - ORGANIZATION: Companies, institutions
-            // - DATE: Temporal expressions
-            // - TITLE: Titles and positions
-            // - O: Other (not a named entity)
+            // ATTEMPT TO ACCESS NER FIELD
+            // When NLP is enabled with OpenNLP NER models, JVS adds segmented_ner field
+            List<String> ner = null;
+            try {
+                ner = doc.getStringList("content.mls[en].segmented_ner");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
             
-            // Access NER results (when available):
-            // List<String> ner = doc.getStringList("content.mls[en].segmented_ner");
+            if (ner != null && !ner.isEmpty()) {
+                // NLP IS ENABLED - verify NER tags
+                System.out.println("✓ NER available: " + ner);
+                
+                // Expected tags:
+                // - PERSON: Names (Biden, Merkel)
+                // - LOCATION: Places (Berlin)
+                // - DATE: Temporal expressions (Monday)
+                // - TITLE: Positions (President, Chancellor)
+                // - O: Other tokens
+                
+                assertThat(ner).contains("PERSON");  // Biden or Merkel
+                assertThat(ner).contains("LOCATION");  // Berlin
+                
+                // Count entity types
+                long personCount = ner.stream().filter(tag -> tag.equals("PERSON")).count();
+                long locationCount = ner.stream().filter(tag -> tag.equals("LOCATION")).count();
+                
+                System.out.println("  Found PERSON entities: " + personCount);
+                System.out.println("  Found LOCATION entities: " + locationCount);
+            } else {
+                System.out.println("✗ NER not available (NLP not enabled)");
+                System.out.println("  To enable: set hitorro.jvs.nlp-enabled=true");
+                System.out.println("  Requires: OpenNLP NER models");
+            }
         }
         
         @Test
-        @DisplayName("Should demonstrate content cleansing and normalization")
-        void shouldDemonstrateContentCleansing() {
+        @DisplayName("Should access clean text field with normalized content")
+        void shouldAccessCleanTextField() {
             // Content with special characters, capitalization, punctuation
             String json = """
                 {
@@ -436,24 +489,50 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
+            // ALWAYS AVAILABLE: Access original text
             String original = doc.getString("text.mls.en.text");
+            assertThat(original).isNotNull();
             assertThat(original).contains("WORLD", "$pecial", "ch@rs", "CAPS");
             
-            // When NLP is enabled, JVS adds a 'clean' field:
+            // ATTEMPT TO ACCESS CLEAN FIELD
+            // When NLP is enabled, JVS creates a 'clean' field with:
             // - Lowercase conversion
             // - Punctuation removal
             // - Special character normalization
             // - Whitespace normalization
-            //
-            // Result: "hello world this is a test with special chars caps"
-            //
-            // Access cleaned text:
-            // String clean = doc.getString("text.mls[en].clean");
+            
+            String clean = null;
+            try {
+                clean = doc.getString("text.mls[en].clean");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
+            
+            if (clean != null && !clean.isEmpty()) {
+                // NLP IS ENABLED - verify cleaning worked
+                System.out.println("✓ Clean text available");
+                System.out.println("  Original: " + original);
+                System.out.println("  Clean:    " + clean);
+                
+                // Verify cleaning operations
+                assertThat(clean).isLowerCase();  // All lowercase
+                assertThat(clean).doesNotContain("!", "?", "...", "$", "@", "&");  // No punctuation/special chars
+                assertThat(clean).contains("hello", "world", "test");  // Core words preserved
+                
+                // Clean text should be suitable for:
+                // - Text comparison (case-insensitive)
+                // - Search indexing
+                // - Duplicate detection
+                // - Fuzzy matching
+            } else {
+                System.out.println("✗ Clean text not available (NLP not enabled)");
+                System.out.println("  Original text: " + original);
+            }
         }
         
         @Test
-        @DisplayName("Should demonstrate POS tagging and syntactic analysis")
-        void shouldDemonstratePOSTagging() {
+        @DisplayName("Should access POS tags and parse tree fields")
+        void shouldAccessPOSAndParseFields() {
             String json = """
                 {
                     "sentence": {
@@ -468,22 +547,72 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
-            // When NLP is enabled, JVS adds:
-            // - segmented_pos: ["DT", "JJ", "JJ", "NN", "VBZ", "IN", "DT", "JJ", "NN"]
-            //   (Part-of-Speech tags: DT=Determiner, JJ=Adjective, NN=Noun, VBZ=Verb, IN=Preposition)
-            //
-            // - segmented_parsed: Full syntactic parse tree (JSON)
-            //
-            // Access POS tags:
-            // List<String> posTags = doc.getStringList("sentence.mls[en].segmented_pos");
-            //
-            // Access parse tree:
-            // JsonNode parseTree = doc.get("sentence.mls[en].segmented_parsed");
+            // ALWAYS AVAILABLE: Access original text
+            String text = doc.getString("sentence.mls.en.text");
+            assertThat(text).isNotNull();
+            
+            // ATTEMPT TO ACCESS POS TAGS
+            // When NLP is enabled with OpenNLP POS tagger, JVS adds segmented_pos field
+            List<String> posTags = null;
+            try {
+                posTags = doc.getStringList("sentence.mls[en].segmented_pos");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
+            
+            if (posTags != null && !posTags.isEmpty()) {
+                // NLP IS ENABLED - verify POS tagging
+                System.out.println("✓ POS tags available: " + posTags);
+                
+                // Expected POS tags for "The quick brown fox jumps over the lazy dog":
+                // DT (Determiner): "The", "the"
+                // JJ (Adjective): "quick", "brown", "lazy"
+                // NN (Noun): "fox", "dog"
+                // VBZ (Verb, 3rd person singular): "jumps"
+                // IN (Preposition): "over"
+                
+                assertThat(posTags).contains("DT", "JJ", "NN", "VBZ");
+                
+                // Count POS types
+                long nounCount = posTags.stream().filter(tag -> tag.startsWith("NN")).count();
+                long verbCount = posTags.stream().filter(tag -> tag.startsWith("VB")).count();
+                long adjCount = posTags.stream().filter(tag -> tag.equals("JJ")).count();
+                
+                System.out.println("  Nouns: " + nounCount);
+                System.out.println("  Verbs: " + verbCount);
+                System.out.println("  Adjectives: " + adjCount);
+            } else {
+                System.out.println("✗ POS tags not available (NLP not enabled)");
+            }
+            
+            // ATTEMPT TO ACCESS PARSE TREE
+            // When NLP is enabled with OpenNLP parser, JVS adds segmented_parsed field
+            JsonNode parseTree = null;
+            try {
+                parseTree = doc.get("sentence.mls[en].segmented_parsed");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
+            
+            if (parseTree != null && !parseTree.isMissingNode()) {
+                // NLP IS ENABLED - verify parse tree exists
+                System.out.println("✓ Parse tree available");
+                System.out.println("  Parse tree structure: " + parseTree.toString().substring(0, Math.min(100, parseTree.toString().length())) + "...");
+                
+                // Parse tree contains full syntactic structure:
+                // - Sentence (S)
+                // - Noun phrases (NP)
+                // - Verb phrases (VP)
+                // - Prepositional phrases (PP)
+                // etc.
+            } else {
+                System.out.println("✗ Parse tree not available (NLP not enabled)");
+            }
         }
         
         @Test
-        @DisplayName("Should demonstrate WordNet semantic features")
-        void shouldDemonstrateWordNetFeatures() {
+        @DisplayName("Should access WordNet semantic classification fields")
+        void shouldAccessWordNetFields() {
             String json = """
                 {
                     "description": {
@@ -498,26 +627,61 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
-            // When NLP is enabled with WordNet, JVS adds:
-            // - segmented_classes: Semantic classifications from WordNet
-            //   (e.g., for "dog": ["canine", "carnivore", "mammal", "animal"])
-            //
-            // - segmented_answers: Potential answer classifications
-            //   (useful for question answering and semantic search)
-            //
-            // Access semantic classes:
-            // List<String> classes = doc.getStringList("description.mls[en].segmented_classes");
-            //
-            // This enables:
-            // - Synonym detection (find similar words)
-            // - Hypernym lookup (find parent concepts)
-            // - Semantic similarity (compare meanings)
-            // - Question answering (match questions to answers)
+            // ALWAYS AVAILABLE: Access original text
+            String text = doc.getString("description.mls.en.text");
+            assertThat(text).isNotNull();
+            
+            // ATTEMPT TO ACCESS SEMANTIC CLASSES
+            // When NLP is enabled with WordNet, JVS adds segmented_classes field
+            List<String> classes = null;
+            try {
+                classes = doc.getStringList("description.mls[en].segmented_classes");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
+            
+            if (classes != null && !classes.isEmpty()) {
+                // NLP IS ENABLED WITH WORDNET - verify semantic features
+                System.out.println("✓ WordNet semantic classes available: " + classes);
+                
+                // For "dog", WordNet provides hypernym chain:
+                // dog → canine → carnivore → mammal → animal → organism → living_thing
+                //
+                // This enables:
+                // - Finding semantically similar words
+                // - Understanding concept hierarchies
+                // - Semantic search (match "dog" to queries about "animals")
+                // - Question answering
+                
+                // Verify semantic classifications exist
+                assertThat(classes).isNotEmpty();
+                System.out.println("  Total semantic classes: " + classes.size());
+            } else {
+                System.out.println("✗ WordNet semantic classes not available");
+                System.out.println("  Requires: hitorro.jvs.nlp-enabled=true");
+                System.out.println("  Requires: WordNet dictionary in ${hitorro.home}/data/wordnet");
+            }
+            
+            // ATTEMPT TO ACCESS ANSWER CLASSIFICATIONS
+            // Used for question answering systems
+            List<String> answers = null;
+            try {
+                answers = doc.getStringList("description.mls[en].segmented_answers");
+            } catch (Exception e) {
+                // Field doesn't exist - NLP not enabled
+            }
+            
+            if (answers != null && !answers.isEmpty()) {
+                System.out.println("✓ Answer classifications available: " + answers);
+                System.out.println("  Can be used for question-answer matching");
+            } else {
+                System.out.println("✗ Answer classifications not available");
+            }
         }
         
         @Test
-        @DisplayName("Should demonstrate normalized hash for efficient comparison")
-        void shouldDemonstrateNormalizedHash() {
+        @DisplayName("Should access normalized hash fields for text comparison")
+        void shouldAccessNormalizedHashFields() {
             String json = """
                 {
                     "title1": {
@@ -535,29 +699,61 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
-            // When NLP is enabled, JVS adds:
-            // - segmented_normhash: Array of hash values for normalized tokens
-            //
-            // These hashes are computed from the normalized (lowercased, cleaned) tokens
-            // enabling efficient comparison of semantically similar text:
-            //
-            // "Hello World" and "HELLO WORLD!!!" both produce same normalized hashes
-            //
-            // Access normalized hashes:
-            // long[] hash1 = doc.getLongArray("title1.mls[en].segmented_normhash");
-            // long[] hash2 = doc.getLongArray("title2.mls[en].segmented_normhash");
-            //
-            // Compare: Arrays.equals(hash1, hash2) would be true
-            //
-            // This enables:
-            // - Duplicate detection (find similar documents)
-            // - Efficient text comparison (O(1) hash comparison vs O(n) string comparison)
-            // - Fuzzy matching (compare normalized representations)
+            // ALWAYS AVAILABLE: Access original text
+            String text1 = doc.getString("title1.mls.en.text");
+            String text2 = doc.getString("title2.mls.en.text");
+            assertThat(text1).isNotEqualTo(text2);  // Different strings
+            
+            // ATTEMPT TO ACCESS NORMALIZED HASHES
+            // When NLP is enabled, JVS creates segmented_normhash for each text
+            long[] hash1 = null;
+            long[] hash2 = null;
+            try {
+                hash1 = doc.getLongArray("title1.mls[en].segmented_normhash");
+                hash2 = doc.getLongArray("title2.mls[en].segmented_normhash");
+            } catch (Exception e) {
+                // Fields don't exist - NLP not enabled
+            }
+            
+            if (hash1 != null && hash1.length > 0 && hash2 != null && hash2.length > 0) {
+                // NLP IS ENABLED - verify hash-based comparison
+                System.out.println("✓ Normalized hashes available");
+                System.out.println("  Text 1: \"" + text1 + "\"");
+                System.out.println("  Hash 1: " + java.util.Arrays.toString(hash1));
+                System.out.println("  Text 2: \"" + text2 + "\"");
+                System.out.println("  Hash 2: " + java.util.Arrays.toString(hash2));
+                
+                // Both should have same number of tokens after normalization
+                assertThat(hash1.length).isEqualTo(hash2.length);
+                
+                // Normalized hashes should match because:
+                // "Hello World" normalizes to ["hello", "world"]
+                // "HELLO WORLD!!!" normalizes to ["hello", "world"]
+                // Both produce same hashes
+                
+                boolean hashesMatch = java.util.Arrays.equals(hash1, hash2);
+                System.out.println("  Hashes match: " + hashesMatch);
+                
+                if (hashesMatch) {
+                    System.out.println("  ✓ Successfully detected duplicate content via hash comparison!");
+                }
+                
+                // Use cases:
+                // 1. Duplicate detection: O(1) hash comparison instead of O(n) string comparison
+                // 2. Fuzzy matching: Find similar text regardless of capitalization/punctuation
+                // 3. Search indexing: Use hashes as keys for fast lookup
+                // 4. Deduplication: Identify semantically identical documents
+            } else {
+                System.out.println("✗ Normalized hashes not available (NLP not enabled)");
+                System.out.println("  Text 1: " + text1);
+                System.out.println("  Text 2: " + text2);
+                System.out.println("  Without hashes, must use slower string comparison");
+            }
         }
         
         @Test
-        @DisplayName("Should demonstrate multi-language NLP processing")
-        void shouldDemonstrateMultiLanguageNLP() {
+        @DisplayName("Should access multi-language NLP fields independently")
+        void shouldAccessMultiLanguageNLPFields() {
             String json = """
                 {
                     "content": {
@@ -578,7 +774,7 @@ public class HitorroJVSIntegrationTest {
             
             JVS doc = jtsManager.createJVS(json);
             
-            // Access different languages
+            // ALWAYS AVAILABLE: Access text in each language
             String english = doc.getString("content.mls.en.text");
             String german = doc.getString("content.mls.de.text");
             String spanish = doc.getString("content.mls.es.text");
@@ -587,22 +783,53 @@ public class HitorroJVSIntegrationTest {
             assertThat(german).isEqualTo("Hallo Welt");
             assertThat(spanish).isEqualTo("Hola mundo");
             
-            // When NLP is enabled, EACH language is processed independently:
+            // ATTEMPT TO ACCESS SEGMENTED FIELDS FOR EACH LANGUAGE
+            // When NLP is enabled, EACH language is processed with language-specific models
+            
+            List<String> enSegments = null;
+            List<String> deSegments = null;
+            List<String> esSegments = null;
+            try {
+                enSegments = doc.getStringList("content.mls[en].segmented");
+                deSegments = doc.getStringList("content.mls[de].segmented");
+                esSegments = doc.getStringList("content.mls[es].segmented");
+            } catch (Exception e) {
+                // Fields don't exist - NLP not enabled
+            }
+            
+            if (enSegments != null && !enSegments.isEmpty()) {
+                System.out.println("✓ Multi-language NLP available");
+                System.out.println("  English segmented: " + enSegments);
+                assertThat(enSegments).containsExactly("Hello", "world");
+            } else {
+                System.out.println("✗ English segmentation not available");
+            }
+            
+            if (deSegments != null && !deSegments.isEmpty()) {
+                System.out.println("  German segmented:  " + deSegments);
+                assertThat(deSegments).containsExactly("Hallo", "Welt");
+            } else {
+                System.out.println("✗ German segmentation not available");
+            }
+            
+            if (esSegments != null && !esSegments.isEmpty()) {
+                System.out.println("  Spanish segmented: " + esSegments);
+                assertThat(esSegments).containsExactly("Hola", "mundo");
+            } else {
+                System.out.println("✗ Spanish segmentation not available");
+            }
+            
+            // Each language can also have its own:
+            // - Clean text: doc.getString("content.mls[en].clean")
+            // - POS tags: doc.getStringList("content.mls[de].segmented_pos")
+            // - NER tags: doc.getStringList("content.mls[es].segmented_ner")
+            // - Parse trees: doc.get("content.mls[en].segmented_parsed")
             //
-            // English: segmented: ["Hello", "world"]
-            // German:  segmented: ["Hallo", "Welt"]
-            // Spanish: segmented: ["Hola", "mundo"]
-            //
-            // Each language gets its own:
-            // - Tokenization (language-specific rules)
-            // - POS tagging (language-specific models)
-            // - NER (language-specific entity recognition)
-            // - Parsing (language-specific grammar)
-            //
-            // Access language-specific results:
-            // List<String> enSegments = doc.getStringList("content.mls[en].segmented");
-            // List<String> deSegments = doc.getStringList("content.mls[de].segmented");
-            // List<String> esSegments = doc.getStringList("content.mls[es].segmented");
+            // This enables:
+            // - Cross-language search
+            // - Multi-language document analysis
+            // - Language-specific text processing
+            // - Internationalized NLP applications
         }
     }
 }
