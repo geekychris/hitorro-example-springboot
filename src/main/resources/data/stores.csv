@@ -1,0 +1,3 @@
+name,storetype,rootpath,docroot,default,public,allowslinks
+default,file,${java.io.tmpdir}/hitorro-store/default,/content/default,true,true,true
+blob,blob,,,false,false,false
