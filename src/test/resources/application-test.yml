@@ -31,6 +31,12 @@ spring:
 
 hitorro:
   enabled: true
+  
+  # Core Hitorro paths - use environment variables or system properties if set, otherwise defaults
+  # These can be overridden via: -DHT_BIN=/path or export HT_BIN=/path
+  ht-bin: ${HT_BIN:/Users/chris/hitorro}
+  ht-home: ${HT_HOME:/Users/chris/hthome}
+  
   services:
     enabled: true
     db-init: true  # Enable DB init for DMS testing
@@ -50,9 +56,9 @@ hitorro:
     actuator-enabled: false
   jvs:
     enabled: true
-    nlp-enabled: false  # NLP requires WordNet data
-    # Type definitions path - absolute path to directory containing config/types/core/
-    type-definitions-path: /home/chris/code/hitorro-all/hitorro-example-springboot/src/main/resources
+    nlp-enabled: false  # NLP requires WordNet data - requires ${HT_HOME}/data/wordnet
+    # Type definitions path - uses HT_BIN by default
+    type-definitions-path: ${HT_BIN:/Users/chris/hitorro}
 
 logging:
   level:

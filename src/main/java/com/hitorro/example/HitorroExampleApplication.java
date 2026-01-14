@@ -44,6 +44,44 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 public class HitorroExampleApplication {
 
     public static void main(String[] args) {
+        // CRITICAL: Configure HT_BIN and HT_HOME BEFORE Spring Boot starts
+        // These are required for Hitorro's property system and type definitions
+        configureHitorroSystemProperties();
+        
         SpringApplication.run(HitorroExampleApplication.class, args);
+    }
+    
+    /**
+     * Configure required Hitorro system properties before Spring initialization.
+     * Must be called before SpringApplication.run().
+     */
+    private static void configureHitorroSystemProperties() {
+        if (System.getProperty("HT_BIN") == null) {
+            String htBin = System.getenv("HT_BIN");
+            if (htBin == null) {
+                // Default to project directory if not set
+                htBin = "/Users/chris/hitorro";
+                System.err.println("WARNING: HT_BIN not configured. Using default: " + htBin);
+                System.err.println("Set via: -DHT_BIN=/path or export HT_BIN=/path");
+            }
+            System.setProperty("HT_BIN", htBin);
+            System.out.println("HT_BIN configured: " + htBin);
+        } else {
+            System.out.println("HT_BIN already set: " + System.getProperty("HT_BIN"));
+        }
+        
+        if (System.getProperty("HT_HOME") == null) {
+            String htHome = System.getenv("HT_HOME");
+            if (htHome == null) {
+                // Default to home directory if not set
+                htHome = "/Users/chris/hthome";
+                System.err.println("WARNING: HT_HOME not configured. Using default: " + htHome);
+                System.err.println("Set via: -DHT_HOME=/path or export HT_HOME=/path");
+            }
+            System.setProperty("HT_HOME", htHome);
+            System.out.println("HT_HOME configured: " + htHome);
+        } else {
+            System.out.println("HT_HOME already set: " + System.getProperty("HT_HOME"));
+        }
     }
 }

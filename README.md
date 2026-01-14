@@ -6,11 +6,14 @@ This is an example Spring Boot application demonstrating how to use the Hitorro 
 
 - ✅ Automatic Hitorro service initialization
 - ✅ Accessing Hitorro services via dependency injection
-- ✅ REST endpoints for service information
+- ✅ DMS operations with versioning support
+- ✅ JSON Type System with NLP features
+- ✅ REST endpoints for documents and queries
+- ✅ **Native CLI (telnet/SSH)** - Interactive command line interface
 - ✅ Command execution via HTTP (`/api/commands/execute`)
-- ✅ Multiple CLI access modes (telnet, SSH, Actuator)
+- ✅ **H2 Database with persistent file storage**
+- ✅ **H2 Console web UI** for database management
 - ✅ Spring Boot Actuator integration
-- ✅ Configuration via `application.yml`
 
 ## Prerequisites
 
@@ -18,6 +21,25 @@ This is an example Spring Boot application demonstrating how to use the Hitorro 
 - Maven 3.8+
 - Hitorro 3.0.0 installed in local Maven repository
 - hitorro-spring-boot-starter 1.0.0 installed
+
+## Dependencies
+
+This example includes:
+- `hitorro-spring-boot-starter` - Core Spring Boot integration
+- `hitorro-basedms` - Document management system
+- `hitorro-text-core` - Text processing & NLP (required for JSON type definitions)
+
+> **Note**: If you see `ClassNotFoundException` for classes like `POSTokenizer`, ensure `hitorro-text-core` is in your dependencies. See [DEPENDENCIES.md](DEPENDENCIES.md) for details.
+
+## 🚀 IntelliJ IDEA Quick Start
+
+**Want to debug right away?** See **[QUICK_START_INTELLIJ.md](QUICK_START_INTELLIJ.md)**
+
+1. Open project in IntelliJ
+2. Select **"HitorroExampleSpringBoot"** from run configurations dropdown
+3. Click Debug button (🐛) or press `Shift+F9`
+
+That's it! The configuration is pre-configured with all required VM options.
 
 ## Building the Application
 
@@ -32,15 +54,56 @@ mvn clean install -pl hitorro-example-springboot -am
 
 ## Running the Application
 
+### ⭐ Recommended: Use application.yml (Simplest)
+
+The **easiest way** - just configure once in `application.yml`:
+
+```yaml
+hitorro:
+  ht-bin: /Users/chris/hitorro      # Your Hitorro installation
+  ht-home: /Users/chris/hthome      # Your Hitorro home directory
+```
+
+Then run normally - no JVM arguments needed:
+
 ```bash
-# Run with Maven
+# With Maven
 mvn spring-boot:run
 
-# Or run the JAR directly
+# With JAR
 java -jar target/hitorro-example-springboot-1.0.0.jar
 ```
 
 The application will start on `http://localhost:8080`
+
+> **✅ Best Practice**: Configure `hitorro.ht-bin` and `hitorro.ht-home` in `application.yml`. The framework automatically converts these to system properties. See [CONFIGURATION_UPDATED.md](CONFIGURATION_UPDATED.md) for details.
+
+### Alternative Methods
+
+<details>
+<summary>Click to see other configuration methods</summary>
+
+#### Option 1: Run Script
+```bash
+./run.sh
+```
+
+#### Option 2: Environment Variables
+```bash
+export HT_BIN=/Users/chris/hitorro
+export HT_HOME=/Users/chris/hthome
+mvn spring-boot:run
+```
+
+#### Option 3: System Properties  
+```bash
+mvn spring-boot:run \
+  -Dspring-boot.run.jvmArguments="-DHT_BIN=/Users/chris/hitorro -DHT_HOME=/Users/chris/hthome"
+```
+
+All methods work, but **application.yml is recommended** for simplicity.
+
+</details>
 
 ## Available Endpoints
 
@@ -88,6 +151,27 @@ curl -X POST http://localhost:8080/api/commands/execute \
 curl http://localhost:8080/api/commands/list
 ```
 
+### Native CLI (Telnet/SSH)
+
+**Quick Start**: See **[CLI_QUICK_START.md](CLI_QUICK_START.md)**
+
+```bash
+# Connect via telnet
+telnet localhost 5050
+
+# Connect via SSH
+ssh -p 5022 user@localhost
+# Password: user
+```
+
+Try commands:
+```
+HitorroExample> help
+HitorroExample> uptime
+HitorroExample> memory
+HitorroExample> threads
+```
+
 ### Spring Boot Actuator Endpoints
 
 ```bash
@@ -101,16 +185,53 @@ curl http://localhost:8080/actuator/info
 curl http://localhost:8080/actuator
 ```
 
+## H2 Database Console
+
+The application includes **H2 Console** - a web-based database management tool.
+
+### Quick Access
+
+1. **Start the application**: `mvn spring-boot:run`
+2. **Open H2 Console**: `http://localhost:8080/h2-console`
+3. **Login**:
+   - JDBC URL: `jdbc:h2:file:./data/hitorrodb`
+   - Username: `sa`
+   - Password: `hitorro`
+
+### Features
+
+- ✅ **Persistent file database** - Data survives restarts
+- ✅ **SQL query execution** - Run queries directly in browser
+- ✅ **Table browser** - Explore schema and data
+- ✅ **Export/Import** - CSV and SQL script support
+- ✅ **Visual query builder** - Click-based query construction
+
+**📖 Complete Guide**: See **[H2_DATABASE_GUIDE.md](H2_DATABASE_GUIDE.md)** for:
+- Detailed H2 Console usage
+- Common SQL queries for Hitorro DMS
+- Backup/restore procedures
+- Troubleshooting tips
+- IntelliJ Database integration
+
+### Database Location
+
+**Files**: `./data/hitorrodb.mv.db`
+
+The database persists between application restarts. To reset:
+```bash
+rm ./data/hitorrodb.mv.db
+```
+
 ## CLI Access
 
 ### Telnet CLI
 ```bash
-telnet localhost 9000
+telnet localhost 5050
 ```
 
 ### SSH CLI
 ```bash
-ssh -p 9022 localhost
+ssh -p 5022 user@localhost
 ```
 
 Both provide access to Hitorro's native command-line interface.
@@ -121,10 +242,19 @@ Edit `src/main/resources/application.yml` to customize:
 
 - Server port
 - Hitorro services configuration
+- H2 database settings (persistent file storage)
 - CLI ports
-- DMS settings (if using)
+- DMS settings
 - Logging levels
-- Database connection (if using DMS)
+
+### Important Configuration Notes
+
+**DMS Store Configuration**: By default, Store CSV loading is disabled to avoid initialization errors. Stores are DMS content storage locations that require file system paths. See **[STORE_CONFIGURATION.md](STORE_CONFIGURATION.md)** if you need to:
+- Store document content (PDFs, images, etc.)
+- Configure content stores with file system paths
+- Enable Store CSV initialization
+
+**H2 Database**: The application uses persistent file-based H2 database. See **[H2_DATABASE_GUIDE.md](H2_DATABASE_GUIDE.md)** for complete database management documentation.
 
 ## Project Structure
 

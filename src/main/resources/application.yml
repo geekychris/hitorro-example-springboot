@@ -7,30 +7,68 @@ spring:
   application:
     name: hitorro-example
 
-  # Database configuration  
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,hitorro
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  # H2 Database Configuration - File-based (persistent)
   datasource:
-    url: jdbc:h2:mem:hitorro;MODE=MySQL;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:file:./data/hitorrodb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
+    username: sa
+    password: hitorro
+  
+  # H2 Console - Web-based database management UI
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        trace: false
+        web-allow-others: false  # Set to true to allow remote connections
   
   # JPA/Hibernate
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update  # Changed from 'create' to 'update' to preserve data across restarts
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
         implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: true  # Enable SQL logging for debugging
     properties:
       hibernate:
         globally_quoted_identifiers: true
+        format_sql: true  # Pretty-print SQL
 
 # Hitorro Configuration
 hitorro:
   enabled: true
   
+  # Application name shown in CLI prompt
+  application-name: HitorroExample
+  
+  # Core Hitorro paths - RECOMMENDED: Set these in application.yml
+  # These will be automatically converted to HT_BIN and HT_HOME system properties
+  ht-bin: /Users/chris/hitorro      # Hitorro installation directory (contains config/, types/, etc.)
+  ht-home: /Users/chris/hthome      # Hitorro home directory (runtime data, logs, cache)
+  
   # Service Configuration
   services:
     enabled: true
     db-init: false
+  
+  # JSON Type System Configuration
+  jvs:
+    enabled: true
+    nlp-enabled: false
+    # Legacy: type-definitions-path still supported for backward compatibility
+    # Prefer hitorro.ht-bin instead
   
   # DMS Configuration
   dms:
@@ -38,8 +76,10 @@ hitorro:
     session-scope: prototype
     
     # Database initialization from CSV files
+    # Disabled by default - Store objects require file system paths to be configured
+    # Enable and configure stores.csv if you need pre-configured content stores
     db-init:
-      enabled: true
+      enabled: false
       fail-on-error: false
       data-sets:
         - name: "stores"
@@ -71,16 +111,7 @@ hitorro:
     # Actuator endpoint
     actuator-enabled: true
 
-# Actuator endpoints
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,hitorro
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: always
+
 
 # Logging
 logging:

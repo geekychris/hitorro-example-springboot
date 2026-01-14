@@ -27,3 +27,9 @@ logs/
 # Spring Boot
 spring.log
 application-local.yml
+
+# H2 Database files
+data/
+*.mv.db
+*.trace.db
+*.lock.db
