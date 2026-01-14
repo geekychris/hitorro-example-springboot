@@ -13,13 +13,13 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: create  # Use 'create' instead of 'create-drop' to keep schema during tests
       # Use Hibernate's default naming strategy (not Spring's)
       # This preserves the exact table names from @Table annotations
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
         implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
-    show-sql: false  # Disable verbose SQL output
+    show-sql: true  # Enable SQL logging for debugging
     properties:
       hibernate:
         format_sql: true
@@ -47,6 +47,7 @@ hitorro:
 logging:
   level:
     root: WARN
-    com.hitorro: INFO
-    org.hibernate: WARN
-    org.springframework.orm: WARN
+    com.hitorro: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.orm: DEBUG
