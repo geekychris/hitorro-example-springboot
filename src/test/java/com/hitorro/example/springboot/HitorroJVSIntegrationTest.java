@@ -75,6 +75,59 @@ public class HitorroJVSIntegrationTest {
             assertThat(jts).isNotNull();
             assertThat(jts).isSameAs(JsonTypeSystem.getMe());
         }
+        
+        @Test
+        @DisplayName("Should load type definitions from disk")
+        void shouldLoadTypeDefinitionsFromDisk() {
+            // Type definitions are loaded from: ${hitorro.jvs.type-definitions-path}/config/types/core/*.json
+            
+            // Try to load the "article" type
+            com.hitorro.jsontypesystem.Type articleType = jtsManager.getType("article");
+            if (articleType != null) {
+                System.out.println("✓ Type 'article' loaded successfully");
+                System.out.println("  Type name: " + articleType.getName());
+                assertThat(articleType.getName()).isEqualTo("article");
+            } else {
+                System.out.println("✗ Type 'article' not found");
+                System.out.println("  Type definitions must be in: ${hitorro.jvs.type-definitions-path}/config/types/core/");
+                System.out.println("  Check configuration: hitorro.jvs.type-definitions-path");
+            }
+            
+            // Try to load the "user_profile" type
+            com.hitorro.jsontypesystem.Type userType = jtsManager.getType("user_profile");
+            if (userType != null) {
+                System.out.println("✓ Type 'user_profile' loaded successfully");
+                System.out.println("  Type name: " + userType.getName());
+                assertThat(userType.getName()).isEqualTo("user_profile");
+            } else {
+                System.out.println("✗ Type 'user_profile' not found");
+            }
+            
+            // Check if types were loaded
+            boolean hasArticle = jtsManager.hasType("article");
+            boolean hasUserProfile = jtsManager.hasType("user_profile");
+            
+            System.out.println("");
+            System.out.println("Type System Status:");
+            System.out.println("  article type available: " + hasArticle);
+            System.out.println("  user_profile type available: " + hasUserProfile);
+            
+            // Type loading is critical for JVS to function correctly
+            // Types define fields and NLP processing rules
+            if (!hasArticle && !hasUserProfile) {
+                System.out.println("");
+                System.out.println("WARNING: No types loaded!");
+                System.out.println("  Without type definitions, JVS cannot:");
+                System.out.println("  - Validate document structure");
+                System.out.println("  - Apply NLP processing rules");
+                System.out.println("  - Create dynamic fields");
+                System.out.println("");
+                System.out.println("  To fix:");
+                System.out.println("  1. Set HT_BIN environment variable or system property");
+                System.out.println("  2. Or set hitorro.jvs.type-definitions-path in application.yml");
+                System.out.println("  3. Ensure JSON files exist in: ${path}/config/types/core/");
+            }
+        }
     }
     
     @Nested

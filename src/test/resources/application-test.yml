@@ -48,6 +48,11 @@ hitorro:
     native-enabled: false  # Disable CLI in tests (ports may conflict)
     spring-shell-enabled: false
     actuator-enabled: false
+  jvs:
+    enabled: true
+    nlp-enabled: false  # NLP requires WordNet data
+    # Type definitions path - absolute path to directory containing config/types/core/
+    type-definitions-path: /home/chris/code/hitorro-all/hitorro-example-springboot/src/main/resources
 
 logging:
   level:
