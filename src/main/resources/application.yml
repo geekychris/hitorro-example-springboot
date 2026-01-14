@@ -1,0 +1,75 @@
+# Hitorro Spring Boot Example Application Configuration
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: hitorro-example-springboot
+
+# Hitorro Configuration
+hitorro:
+  # Enable Hitorro integration
+  enabled: true
+  
+  # Service Configuration
+  services:
+    enabled: true
+    # Database initialization (set to true on first run if needed)
+    db-init: false
+  
+  # DMS Configuration (if using DMS features)
+  dms:
+    enabled: false  # Enable if you need DMS
+    session-scope: request
+    transaction-mode: spring-managed
+  
+  # Command REST Endpoints
+  commands:
+    rest:
+      enabled: true
+      base-path: /api/commands
+  
+  # CLI Configuration
+  cli:
+    # Native Hitorro CLI (telnet/SSH)
+    native-enabled: true
+    telnet-port: 9000
+    ssh-port: 9022
+    # Spring Shell integration
+    spring-shell-enabled: false  # Set to true if using Spring Shell
+    # Actuator endpoints
+    actuator-enabled: true
+
+# Spring Boot Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,hitorro
+  endpoint:
+    health:
+      show-details: always
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.hitorro: DEBUG
+    com.hitorro.spring: DEBUG
+    com.hitorro.example: DEBUG
+    org.springframework.boot: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# Example: Database Configuration (if using DMS)
+# spring:
+#   datasource:
+#     url: jdbc:mysql://localhost:3306/hitorro
+#     username: hitorro
+#     password: changeme
+#     driver-class-name: com.mysql.cj.jdbc.Driver
+#   jpa:
+#     hibernate:
+#       ddl-auto: update
+#     show-sql: false

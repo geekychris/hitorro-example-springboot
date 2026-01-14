@@ -1,0 +1,52 @@
+# Test Configuration - With H2 database for DMS testing
+
+spring:
+  # H2 in-memory database for testing
+  # CASE_INSENSITIVE_IDENTIFIERS=TRUE allows case-insensitive table/column lookups
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  
+  # JPA Configuration
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+      # Use Hibernate's default naming strategy (not Spring's)
+      # This preserves the exact table names from @Table annotations
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false  # Disable verbose SQL output
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: false
+        # Quote all identifiers to avoid reserved keyword conflicts
+        globally_quoted_identifiers: true
+
+hitorro:
+  enabled: true
+  services:
+    enabled: true
+    db-init: true  # Enable DB init for DMS testing
+  dms:
+    enabled: true  # Enable DMS for testing
+    session-scope: prototype  # Use prototype scope for testing
+    transaction-mode: spring-managed
+  commands:
+    rest:
+      enabled: true
+  cli:
+    native-enabled: false  # Disable CLI in tests (ports may conflict)
+    spring-shell-enabled: false
+    actuator-enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.hitorro: INFO
+    org.hibernate: WARN
+    org.springframework.orm: WARN
