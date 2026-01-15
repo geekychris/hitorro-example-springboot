@@ -167,10 +167,14 @@ ssh -p 5022 user@localhost
 Try commands:
 ```
 HitorroExample> help
-HitorroExample> uptime
-HitorroExample> memory
-HitorroExample> threads
+HitorroExample> quit          # Exit CLI session
+HitorroExample> uptime        # Application uptime
+HitorroExample> memory        # Memory usage
+HitorroExample> threads       # Thread info
+HitorroExample> env.time      # Current time
 ```
+
+**Note**: All `@CommandDef` annotated methods are automatically discovered and registered! See [COMMANDDEF_ANNOTATION_SUPPORT.md](../COMMANDDEF_ANNOTATION_SUPPORT.md) for details.
 
 ### Spring Boot Actuator Endpoints
 
