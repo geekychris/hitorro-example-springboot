@@ -7,6 +7,18 @@ spring:
   application:
     name: hitorro-example
 
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: true
+
 
 management:
   endpoints:
@@ -97,6 +109,28 @@ hitorro:
     rest:
       enabled: true
       base-path: /api/commands
+  
+  # File System Configuration
+  filesystem:
+    # Local file system - Access to local files and directories
+    local:
+      enabled: true
+      base-path: ./data/files  # Base directory for local file operations
+    
+    # JAR file system - Access to files inside JAR archives
+    # Note: JarFileSystem exists but has limited implementation (may return null for operations)
+    jar:
+      enabled: false  # Disabled by default - enable when you have a JAR file to read
+      jar-path: ./example-resources.jar  # Path to JAR file to access
+    
+    # S3-compatible file system - MinIO, Wasabi, DigitalOcean Spaces, etc.
+    s3:
+      enabled: false  # Set to true to enable S3 filesystem
+      endpoint: http://localhost:9000  # MinIO local, or https://s3.wasabisys.com for Wasabi
+      bucket: hitorro-data
+      access-key: minioadmin
+      secret-key: minioadmin
+      ssl-enabled: false  # true for production, false for local MinIO
   
   # CLI Configuration
   cli:
