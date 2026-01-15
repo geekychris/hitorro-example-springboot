@@ -38,15 +38,21 @@ hitorro:
   ht-home: ${HT_HOME:/Users/chris/hthome}
   
   services:
-    enabled: true
-    db-init: true  # Enable DB init for DMS testing
+    enabled: true  # Enable service context manager
+    db-init: true  # Enable service framework db-init for proper initialization
+    load:
+      - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
+  # Hitorro-specific properties (will be converted to JVSProperties)
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
   dms:
     enabled: true  # Enable DMS for testing
     session-scope: prototype  # Use prototype scope for testing
     transaction-mode: spring-managed
     db-init:
-      enabled: false  # Disable CSV loading in tests to avoid Store initialization errors
-      # Stores require file system setup which isn't needed for basic DMS tests
+      enabled: false  # CSV loading handled by TestDMSConfiguration via integration events
+      # This avoids full service loading while still getting Store/DomainInfo data
   commands:
     rest:
       enabled: true

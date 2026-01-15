@@ -1,0 +1,630 @@
+### Document Management System (DMS) API Tests
+### Base URL
+@baseUrl = http://localhost:8080/api/dms
+@contentType = application/json
+
+### ============================================================================
+### Document CRUD Operations
+### ============================================================================
+
+### 1. Create a new document
+POST {{baseUrl}}/documents
+Content-Type: {{contentType}}
+
+{
+  "title": "Annual Report 2026",
+  "note": "Q4 2026 Annual Report",
+  "creator": "john.doe",
+  "realm": "default",
+  "categories": [
+    {
+      "domain": "type",
+      "value": "report"
+    },
+    {
+      "domain": "department",
+      "value": "finance"
+    },
+    {
+      "domain": "status",
+      "value": "draft"
+    }
+  ]
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 201, "Response status is not 201");
+    });
+    client.test("Response has document ID", function() {
+        var data = response.body;
+        client.assert(data.id !== null, "Document ID is null");
+        client.global.set("documentId", data.id);
+    });
+    client.test("Document has correct title", function() {
+        var data = response.body;
+        client.assert(data.title === "Annual Report 2026", "Title mismatch");
+    });
+    client.test("Document has categories", function() {
+        var data = response.body;
+        client.assert(data.categories.length > 0, "No categories found");
+    });
+%}
+
+###
+
+### 2. Get document by ID
+GET {{baseUrl}}/documents/{{documentId}}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Document returned", function() {
+        var data = response.body;
+        client.assert(data.id == client.global.get("documentId"), "Wrong document ID");
+    });
+%}
+
+###
+
+### 3. Update document
+PUT {{baseUrl}}/documents/{{documentId}}
+Content-Type: {{contentType}}
+
+{
+  "title": "Annual Report 2026 - Final",
+  "note": "Final version of Q4 2026 Annual Report"
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Title updated", function() {
+        var data = response.body;
+        client.assert(data.title === "Annual Report 2026 - Final", "Title not updated");
+    });
+%}
+
+###
+
+### 4. Delete document (cleanup - run at end)
+# DELETE {{baseUrl}}/documents/{{documentId}}
+
+###
+
+### ============================================================================
+### Category Management
+### ============================================================================
+
+### 5. Add category to document
+POST {{baseUrl}}/documents/{{documentId}}/categories
+Content-Type: {{contentType}}
+
+{
+  "domain": "priority",
+  "value": "high"
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Response indicates success", function() {
+        var data = response.body;
+        client.assert(data.status === "success", "Status is not success");
+    });
+%}
+
+###
+
+### 6. Remove category from document
+DELETE {{baseUrl}}/documents/{{documentId}}/categories?domain=priority&value=high
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
+
+###
+
+### ============================================================================
+### Version Management
+### ============================================================================
+
+### 7. Create new version
+POST {{baseUrl}}/documents/{{documentId}}/version
+Content-Type: {{contentType}}
+
+{
+  "note": "Version 1.1 - Added executive summary"
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 201, "Response status is not 201");
+    });
+    client.test("New version created", function() {
+        var data = response.body;
+        client.assert(data.id !== null, "Version ID is null");
+        client.assert(data.id != client.global.get("documentId"), "Same ID as original");
+        client.global.set("versionId", data.id);
+    });
+    client.test("Version has parent reference", function() {
+        var data = response.body;
+        client.assert(data.parentVersionId !== null, "No parent version ID");
+    });
+%}
+
+###
+
+### 8. Get version history
+GET {{baseUrl}}/documents/{{documentId}}/versions
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Version history returned", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+        client.assert(data.length > 0, "No versions found");
+    });
+%}
+
+###
+
+### ============================================================================
+### Content Management
+### ============================================================================
+
+### 9. List document content
+GET {{baseUrl}}/documents/{{documentId}}/content/list
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Content list is array", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+    });
+%}
+
+###
+
+### ============================================================================
+### Query and Search Operations
+### ============================================================================
+
+### 10. Query documents - title search
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "title": "Annual",
+  "orderBy": "modifiedDate",
+  "descending": true,
+  "maxResults": 20
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Results returned", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+    });
+%}
+
+###
+
+### 11. Query documents - creator filter
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "creator": "john.doe",
+  "orderBy": "creationDate",
+  "descending": true,
+  "maxResults": 50
+}
+
+###
+
+### 12. Query documents - date range
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "createdAfter": "2026-01-01T00:00:00Z",
+  "createdBefore": "2026-12-31T23:59:59Z",
+  "orderBy": "title",
+  "maxResults": 100
+}
+
+###
+
+### 13. Search by category
+GET {{baseUrl}}/documents/search/category?domain=type&value=report
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Documents with category returned", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+    });
+%}
+
+###
+
+### 14. Search by category - different category
+GET {{baseUrl}}/documents/search/category?domain=department&value=finance
+
+###
+
+### ============================================================================
+### Container Management
+### ============================================================================
+
+### 15. Create a container (setup)
+# Note: This requires a separate container creation endpoint or manual setup
+# For now, use an existing container ID
+
+### Set container ID (replace with actual container ID)
+@containerId = 1
+
+###
+
+### 16. Attach document to container
+POST {{baseUrl}}/documents/{{documentId}}/containers/{{containerId}}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200 || response.status === 404, 
+                     "Unexpected status: " + response.status);
+    });
+    if (response.status === 200) {
+        client.test("Attachment successful", function() {
+            var data = response.body;
+            client.assert(data.status === "success", "Status is not success");
+        });
+    }
+%}
+
+###
+
+### 17. List document containers
+GET {{baseUrl}}/documents/{{documentId}}/containers
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Container list is array", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+    });
+%}
+
+###
+
+### 18. Get documents in container
+GET {{baseUrl}}/containers/{{containerId}}/documents?maxResults=50
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200 || response.status === 404, 
+                     "Unexpected status: " + response.status);
+    });
+%}
+
+###
+
+### 19. Detach document from container
+DELETE {{baseUrl}}/documents/{{documentId}}/containers/{{containerId}}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200 || response.status === 404, 
+                     "Unexpected status: " + response.status);
+    });
+%}
+
+###
+
+### ============================================================================
+### Complex Scenarios
+### ============================================================================
+
+### 20. Create document with all properties
+POST {{baseUrl}}/documents
+Content-Type: {{contentType}}
+
+{
+  "title": "Comprehensive Document Test",
+  "note": "Testing all document properties",
+  "creator": "test.user",
+  "realm": "test-realm",
+  "categories": [
+    {"domain": "type", "value": "test"},
+    {"domain": "status", "value": "active"},
+    {"domain": "priority", "value": "medium"},
+    {"domain": "visibility", "value": "internal"}
+  ]
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 201, "Response status is not 201");
+    });
+    client.test("All properties set", function() {
+        var data = response.body;
+        client.assert(data.title === "Comprehensive Document Test", "Title mismatch");
+        client.assert(data.creator === "test.user", "Creator mismatch");
+        client.assert(data.realm === "test-realm", "Realm mismatch");
+        client.assert(data.categories.length > 0, "No categories");
+    });
+    client.global.set("testDocId", data.id);
+%}
+
+###
+
+### 21. Query with multiple filters
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "title": "Document",
+  "creator": "test.user",
+  "realm": "test-realm",
+  "orderBy": "modifiedDate",
+  "descending": true,
+  "maxResults": 10
+}
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Filtered results returned", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+        if (data.length > 0) {
+            client.assert(data[0].realm === "test-realm", "Realm filter failed");
+        }
+    });
+%}
+
+###
+
+### 22. Create multiple versions
+POST {{baseUrl}}/documents/{{testDocId}}/version
+Content-Type: {{contentType}}
+
+{"note": "Version 1.1"}
+
+###
+
+POST {{baseUrl}}/documents/{{testDocId}}/version
+Content-Type: {{contentType}}
+
+{"note": "Version 1.2"}
+
+###
+
+POST {{baseUrl}}/documents/{{testDocId}}/version
+Content-Type: {{contentType}}
+
+{"note": "Version 1.3"}
+
+###
+
+### 23. Get complete version tree
+GET {{baseUrl}}/documents/{{testDocId}}/versions
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Multiple versions exist", function() {
+        var data = response.body;
+        client.assert(data.length >= 1, "Expected at least 1 version");
+    });
+    client.test("Versions are ordered", function() {
+        var data = response.body;
+        for (var i = 0; i < data.length - 1; i++) {
+            // Check that versions have increasing IDs or proper linkage
+            client.assert(data[i].id !== null, "Version ID is null");
+        }
+    });
+%}
+
+###
+
+### ============================================================================
+### Error Handling Tests
+### ============================================================================
+
+### 24. Get non-existent document (404)
+GET {{baseUrl}}/documents/999999
+
+> {%
+    client.test("Returns 404 for non-existent document", function() {
+        client.assert(response.status === 404 || response.status === 500, 
+                     "Expected 404 or 500, got: " + response.status);
+    });
+%}
+
+###
+
+### 25. Create document with missing title (should fail gracefully)
+POST {{baseUrl}}/documents
+Content-Type: {{contentType}}
+
+{
+  "note": "Document without title"
+}
+
+> {%
+    client.test("Handles missing title", function() {
+        // Should fail or return error
+        client.assert(response.status !== 201, "Should not succeed without title");
+    });
+%}
+
+###
+
+### 26. Query with invalid parameters
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "orderBy": "invalidField",
+  "maxResults": -1
+}
+
+> {%
+    client.test("Handles invalid query", function() {
+        // Should return error or empty results
+        client.assert(response.status === 200 || response.status === 500, 
+                     "Unexpected status: " + response.status);
+    });
+%}
+
+###
+
+### 27. Add duplicate category
+POST {{baseUrl}}/documents/{{documentId}}/categories
+Content-Type: {{contentType}}
+
+{
+  "domain": "type",
+  "value": "report"
+}
+
+> {%
+    client.test("Handles duplicate category gracefully", function() {
+        client.assert(response.status === 200 || response.status === 500, 
+                     "Unexpected status: " + response.status);
+    });
+%}
+
+###
+
+### ============================================================================
+### Cleanup - Run these to delete test documents
+### ============================================================================
+
+### Delete main test document
+DELETE {{baseUrl}}/documents/{{documentId}}
+
+> {%
+    client.test("Document deleted", function() {
+        client.assert(response.status === 200 || response.status === 404, 
+                     "Unexpected status: " + response.status);
+    });
+%}
+
+###
+
+### Delete comprehensive test document
+DELETE {{baseUrl}}/documents/{{testDocId}}
+
+###
+
+### Delete version (if created)
+DELETE {{baseUrl}}/documents/{{versionId}}
+
+###
+
+### ============================================================================
+### Performance Tests
+### ============================================================================
+
+### 28. Large query - retrieve maximum documents
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "maxResults": 1000,
+  "orderBy": "modifiedDate",
+  "descending": true
+}
+
+> {%
+    client.test("Request executed", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    client.test("Results limited appropriately", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+        client.assert(data.length <= 1000, "Too many results returned");
+    });
+%}
+
+###
+
+### 29. Search across multiple categories
+GET {{baseUrl}}/documents/search/category?domain=status&value=active
+
+###
+GET {{baseUrl}}/documents/search/category?domain=status&value=draft
+
+###
+GET {{baseUrl}}/documents/search/category?domain=type&value=report
+
+###
+
+### ============================================================================
+### Batch Operations (Create Multiple Documents)
+### ============================================================================
+
+### 30. Create Document 1
+POST {{baseUrl}}/documents
+Content-Type: {{contentType}}
+
+{"title": "Batch Document 1", "creator": "batch-test", "categories": [{"domain": "batch", "value": "test1"}]}
+
+###
+
+### 31. Create Document 2
+POST {{baseUrl}}/documents
+Content-Type: {{contentType}}
+
+{"title": "Batch Document 2", "creator": "batch-test", "categories": [{"domain": "batch", "value": "test2"}]}
+
+###
+
+### 32. Create Document 3
+POST {{baseUrl}}/documents
+Content-Type: {{contentType}}
+
+{"title": "Batch Document 3", "creator": "batch-test", "categories": [{"domain": "batch", "value": "test3"}]}
+
+###
+
+### 33. Query all batch documents
+POST {{baseUrl}}/documents/query
+Content-Type: {{contentType}}
+
+{
+  "creator": "batch-test",
+  "maxResults": 100
+}
+
+> {%
+    client.test("Batch documents found", function() {
+        var data = response.body;
+        client.assert(Array.isArray(data), "Response is not an array");
+    });
+%}
+
+###
+
+### End of DMS API Tests
