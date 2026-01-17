@@ -46,6 +46,8 @@ hitorro:
   hitorro-properties:
     network.disablelocalhostcheck: true
     rpc.enableclustermember: false
+    # CRITICAL: dbinit property (no hyphen!) tells ServiceContext to run init with dbInit=true
+    dbinit: true
   dms:
     enabled: true  # Enable DMS for testing
     session-scope: prototype  # Use prototype scope for testing
