@@ -1,11 +1,24 @@
 # API Testing Guide - Hitorro Example
 
+## Quick Access
+
+Once the application is running (`mvn spring-boot:run` or run `HitorroExampleApplication`), access these endpoints:
+
+- **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **H2 Console**: http://localhost:8080/h2-console
+  - JDBC URL: `jdbc:h2:file:./data/hitorrodb`
+  - Username: `sa`
+  - Password: `hitorro`
+- **Actuator**: http://localhost:8080/actuator
+- **Health Check**: http://localhost:8080/actuator/health
+
 ## Overview
 
-This guide covers **two powerful ways** to test and explore the Hitorro Spring Boot APIs:
+This guide covers **three powerful ways** to test and explore the Hitorro Spring Boot application:
 
 1. **IntelliJ HTTP Client** - File-based API testing with scripts
 2. **Swagger UI** - Interactive browser-based API explorer
+3. **H2 Console** - Direct database access and SQL queries
 
 ## Method 1: IntelliJ HTTP Client
 
@@ -320,12 +333,109 @@ Check:
 - Base URL is correct in .http file
 - File system is enabled in application.yml
 
+### H2 Console Not Accessible
+
+**In Spring Boot 3.x**, the H2 console requires additional security configuration. This has been fixed by:
+
+1. **Adding Spring Security dependency** in `pom.xml`
+2. **Creating H2ConsoleConfig.java** to allow H2 console access
+
+If you still can't access it:
+- Verify H2 console is enabled in `application.yml`: `spring.h2.console.enabled: true`
+- Ensure Spring Security dependency is in `pom.xml`
+- Restart the application after adding dependencies
+- Check for any security-related errors in logs
+
+## Method 3: H2 Console - Database Explorer
+
+### Accessing H2 Console
+
+The H2 Console provides direct database access for inspecting DMS data, debugging queries, and understanding the schema.
+
+**URL**: http://localhost:8080/h2-console
+
+### Connection Settings
+
+When the login page appears, enter:
+
+- **Saved Settings**: Generic H2 (Embedded)
+- **Driver Class**: `org.h2.Driver`
+- **JDBC URL**: `jdbc:h2:file:./data/hitorrodb`
+- **User Name**: `sa`
+- **Password**: `hitorro`
+
+Click **Connect** to access the database.
+
+### Features
+
+✅ **SQL Console** - Run queries directly:
+```sql
+-- List all tables
+SELECT * FROM INFORMATION_SCHEMA.TABLES;
+
+-- View DMS entities
+SELECT * FROM NamedLongEntry;
+SELECT * FROM Document;
+SELECT * FROM Store;
+
+-- Check DomainInfo
+SELECT * FROM DomainInfo;
+```
+
+✅ **Schema Browser** - Navigate tables and view structure
+
+✅ **Query History** - Recent queries are saved
+
+✅ **Export/Import** - Backup and restore data
+
+### Example Queries
+
+#### View All Named Long Entries
+```sql
+SELECT id, guid, name, value, incrementor, description 
+FROM NamedLongEntry 
+ORDER BY name;
+```
+
+#### Count Entities by Type
+```sql
+SELECT 
+  'NamedLongEntry' as entity_type,
+  COUNT(*) as count
+FROM NamedLongEntry
+UNION ALL
+SELECT 'Document', COUNT(*) FROM Document
+UNION ALL
+SELECT 'Store', COUNT(*) FROM Store;
+```
+
+#### Find Entries by Name Pattern
+```sql
+SELECT * FROM NamedLongEntry 
+WHERE name LIKE '%test%';
+```
+
+#### View Hibernate Sequences
+```sql
+SELECT * FROM INFORMATION_SCHEMA.SEQUENCES;
+```
+
+### Tips
+
+- **Schema Inspection**: Click table names in left sidebar to view structure
+- **Auto-complete**: Press `Ctrl+Space` in SQL editor
+- **Execute**: Click "Run" or press `Ctrl+Enter`
+- **Clear Results**: Use "Clear" button between queries
+- **Export Results**: Click "CSV" or "Excel" in results pane
+
 ## Summary
 
 ✅ **IntelliJ HTTP Client file created**: `filesystem-api-tests.http`  
 ✅ **Swagger UI enabled**: http://localhost:8080/swagger-ui.html  
+✅ **H2 Console enabled**: http://localhost:8080/h2-console  
 ✅ **60+ API test examples** covering all scenarios  
 ✅ **Interactive documentation** for easy exploration  
-✅ **Both tools ready to use** for comprehensive API testing  
+✅ **Direct database access** for DMS inspection  
+✅ **Three powerful tools** for comprehensive testing  
 
 Happy testing! 🚀

@@ -6,29 +6,7 @@ server:
 spring:
   application:
     name: hitorro-example
-
-# Swagger/OpenAPI Configuration
-springdoc:
-  api-docs:
-    path: /api-docs
-    enabled: true
-  swagger-ui:
-    path: /swagger-ui.html
-    enabled: true
-    operationsSorter: method
-    tagsSorter: alpha
-  show-actuator: true
-
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,hitorro
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: always
+  
   # H2 Database Configuration - File-based (persistent)
   datasource:
     url: jdbc:h2:file:./data/hitorrodb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
@@ -52,11 +30,35 @@ management:
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
         implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
-    show-sql: true  # Enable SQL logging for debugging
+    show-sql: false  # Disable SQL logging (too verbose)
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
         globally_quoted_identifiers: true
         format_sql: true  # Pretty-print SQL
+
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: true
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,hitorro
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
 
 # Hitorro Configuration
 hitorro:
@@ -73,7 +75,17 @@ hitorro:
   # Service Configuration
   services:
     enabled: true
-    db-init: false
+    db-init: true  # Enable service framework db-init for proper initialization
+    load:
+      - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
+  
+  # Hitorro-specific properties (will be converted to JVSProperties)
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
+    # CRITICAL: dbinit property (no hyphen!) tells ServiceContext to run init with dbInit=true
+    # This triggers integration events to load Store and DomainInfo from CSV files
+    dbinit: true
   
   # JSON Type System Configuration
   jvs:

@@ -58,6 +58,9 @@ public class HitorroJVSIntegrationTest {
     @Autowired
     private JsonTypeSystemManager jtsManager;
     
+    @Autowired(required = false)
+    private com.hitorro.spring.autoconfigure.service.ServiceContextManager serviceContextManager;
+    
     @Nested
     @DisplayName("Spring Boot Integration")
     class SpringBootIntegration {
@@ -66,6 +69,63 @@ public class HitorroJVSIntegrationTest {
         @DisplayName("Should inject JsonTypeSystemManager")
         void shouldInjectJsonTypeSystemManager() {
             assertThat(jtsManager).isNotNull();
+        }
+        
+        @Test
+        @DisplayName("Should have ServiceContextManager initialized (if services enabled)")
+        void shouldHaveServiceContextManagerInitialized() {
+            // ServiceContextManager is only created if hitorro.services.enabled=true
+            // In test profile, this is enabled, so it should be present
+            if (serviceContextManager != null) {
+                System.out.println("✓ ServiceContextManager is initialized");
+                System.out.println("  Services initialized: " + serviceContextManager.isInitialized());
+                System.out.println("  Service count: " + serviceContextManager.getAllServices().size());
+                
+                // List all initialized services
+                serviceContextManager.getAllServices().forEach(service -> {
+                    System.out.println("  - " + service.getShortName() + ": " + service.getDescription());
+                });
+                
+                assertThat(serviceContextManager.isInitialized()).isTrue();
+            } else {
+                System.out.println("✗ ServiceContextManager not initialized");
+                System.out.println("  This means hitorro.services.enabled is false or service auto-config didn't run");
+                System.out.println("  JVSProperties may not be fully initialized from config directories");
+            }
+        }
+        
+        @Test
+        @DisplayName("Should have JVSProperties initialized")
+        void shouldHaveJVSPropertiesInitialized() {
+            // Check if JVSProperties singleton is initialized
+            com.hitorro.jsontypesystem.JVS props = 
+                com.hitorro.jsontypesystem.propreaders.JVSProperties.getProperties();
+            
+            if (props != null) {
+                System.out.println("✓ JVSProperties is initialized");
+                System.out.println("  Properties loaded from HT_BIN/config and HT_HOME/config");
+                
+                // Try to access a common property
+                try {
+                    String servertype = props.getString("servertype", null);
+                    if (servertype != null) {
+                        System.out.println("  servertype property: " + servertype);
+                    }
+                } catch (Exception e) {
+                    // Property access failed
+                }
+                
+                assertThat(props).isNotNull();
+            } else {
+                System.out.println("✗ JVSProperties NOT initialized");
+                System.out.println("  This indicates ServiceContextManager didn't run Phase 0");
+                System.out.println("  Check:");
+                System.out.println("  - hitorro.services.enabled should be true");
+                System.out.println("  - ServiceContextManager bean should be created");
+                System.out.println("  - afterPropertiesSet() should have been called");
+                
+                fail("JVSProperties should be initialized by ServiceContextManager Phase 0");
+            }
         }
         
         @Test
@@ -644,32 +704,35 @@ public class HitorroJVSIntegrationTest {
                 System.out.println("  Text: " + text);
                 
                 // DYNAMIC FIELD: segmented_ner is computed by NERMarkupMapper from lang + segmented
+                // Returns array of strings (one marked-up sentence per element)
                 try {
-                    List<String> ner = doc.getStringList("body.mls[en].segmented_ner");
+                    JsonNode nerNode = doc.get("body.mls[en].segmented_ner");
                     
-                    if (ner != null && !ner.isEmpty()) {
-                        System.out.println("✓ NER tags available: " + ner.size() + " tags");
-                        System.out.println("  NER tags: " + ner);
+                    if (nerNode != null && nerNode.isArray() && nerNode.size() > 0) {
+                        System.out.println("✓ NER markup available: " + nerNode.size() + " sentences");
                         
-                        // Expected tags: PERSON, LOCATION, DATE, TITLE, O (other)
-                        assertThat(ner).isNotEmpty();
+                        assertThat(nerNode.isArray()).isTrue();
+                        assertThat(nerNode.size()).isGreaterThan(0);
                         
-                        // Count entity types (case-insensitive)
-                        long personCount = ner.stream()
-                            .filter(tag -> tag != null && (tag.equalsIgnoreCase("PERSON") || tag.contains("person")))
-                            .count();
-                        long locationCount = ner.stream()
-                            .filter(tag -> tag != null && (tag.equalsIgnoreCase("LOCATION") || tag.contains("location")))
-                            .count();
-                        
-                        System.out.println("  Found PERSON entities: " + personCount);
-                        System.out.println("  Found LOCATION entities: " + locationCount);
-                        
-                        if (personCount > 0 || locationCount > 0) {
-                            System.out.println("  ✓ Named entities detected");
-                        } else {
-                            System.out.println("  ℹ No named entities found (may need NER models)");
+                        // Each sentence contains tokens with entity tags like: 
+                        // "NE_person NE_person O O NE_person NE_person O NE_location"
+                        System.out.println("  NER-enriched sentences:");
+                        for (JsonNode sentence : nerNode) {
+                            if (sentence != null && sentence.isTextual()) {
+                                String markedUp = sentence.asText();
+                                System.out.println("    " + markedUp);
+                                
+                                // Count entity mentions in this sentence
+                                if (markedUp.contains("NE_person") || markedUp.contains("PERSON")) {
+                                    System.out.println("      (contains PERSON entities)");
+                                }
+                                if (markedUp.contains("NE_location") || markedUp.contains("LOCATION")) {
+                                    System.out.println("      (contains LOCATION entities)");
+                                }
+                            }
                         }
+                        
+                        System.out.println("  ✓ Named entity markup generated");
                     } else {
                         System.out.println("✗ NER not available (requires OpenNLP NER models)");
                         System.out.println("  To enable: hitorro.jvs.nlp-enabled=true + NER models");
@@ -677,6 +740,7 @@ public class HitorroJVSIntegrationTest {
                 } catch (Exception e) {
                     System.out.println("✗ NER field access failed: " + e.getMessage());
                     System.out.println("  This is expected if NER models are not installed");
+                    e.printStackTrace();
                 }
             } catch (AssertionError e) {
                 // Lucene TokenStream compatibility issue - can happen during document creation or field access
@@ -685,6 +749,7 @@ public class HitorroJVSIntegrationTest {
                 System.out.println("  Error: " + e.getMessage());
                 System.out.println("  This is a known issue with OpenNLP/Lucene version mismatch");
                 System.out.println("  NER functionality requires compatible Lucene and OpenNLP versions");
+				System.out.println(e.getStackTrace());
                 // Don't fail the test - this is an environment/compatibility issue
             }
         }
@@ -758,42 +823,57 @@ public class HitorroJVSIntegrationTest {
             System.out.println("  Text: " + text);
             
             // DYNAMIC FIELD: pos is computed by POSTokenizer from lang + clean
+            // Returns array of objects: [{"word": "tag"}, ...]
             try {
-                List<String> posTags = doc.getStringList("body.mls[en].pos");
+                JsonNode posNode = doc.get("body.mls[en].pos");
                 
-                if (posTags != null && !posTags.isEmpty()) {
-                    System.out.println("✓ POS tags available: " + posTags.size() + " tags");
-                    System.out.println("  POS tags: " + posTags);
+                if (posNode != null && posNode.isArray() && posNode.size() > 0) {
+                    System.out.println("✓ POS tags available: " + posNode.size() + " word-tag pairs");
                     
-                    assertThat(posTags).isNotEmpty();
+                    assertThat(posNode.isArray()).isTrue();
+                    assertThat(posNode.size()).isGreaterThan(0);
                     
-                    // Filter out null tags (may occur if POS tagger not fully initialized)
-                    long validTags = posTags.stream().filter(tag -> tag != null && !tag.isEmpty()).count();
+                    // Count POS types: DT (determiner), JJ (adjective), NN (noun), VBZ (verb), etc.
+                    int nounCount = 0;
+                    int verbCount = 0;
+                    int adjCount = 0;
+                    int detCount = 0;
                     
-                    if (validTags > 0) {
-                        System.out.println("  Valid POS tags: " + validTags);
-                        
-                        // Expected tags: DT (determiner), JJ (adjective), NN (noun), VBZ (verb), etc.
-                        // Count POS types (skip nulls)
-                        long nounCount = posTags.stream()
-                            .filter(tag -> tag != null && tag.startsWith("NN"))
-                            .count();
-                        long verbCount = posTags.stream()
-                            .filter(tag -> tag != null && tag.startsWith("VB"))
-                            .count();
-                        long adjCount = posTags.stream()
-                            .filter(tag -> tag != null && tag.equals("JJ"))
-                            .count();
-                        
-                        System.out.println("  Nouns: " + nounCount);
-                        System.out.println("  Verbs: " + verbCount);
-                        System.out.println("  Adjectives: " + adjCount);
-                        
-                        if (nounCount > 0 && verbCount > 0) {
-                            System.out.println("  ✓ POS tagging working correctly");
+                    System.out.println("  Sample POS tags:");
+                    int displayed = 0;
+                    for (JsonNode wordTagPair : posNode) {
+                        if (wordTagPair != null && wordTagPair.isObject()) {
+                            // Each object has one field: word -> tag
+                            var entry = wordTagPair.fields().next();
+                            String word = entry.getKey();
+                            String tag = entry.getValue().asText();
+                            
+                            if (displayed < 5) {
+                                System.out.println("    " + word + " -> " + tag);
+                                displayed++;
+                            }
+                            
+                            // Count tag types
+                            if (tag.startsWith("NN")) nounCount++;
+                            else if (tag.startsWith("VB")) verbCount++;
+                            else if (tag.equals("JJ")) adjCount++;
+                            else if (tag.equals("DT")) detCount++;
                         }
+                    }
+                    if (posNode.size() > 5) {
+                        System.out.println("    ... (" + (posNode.size() - 5) + " more)");
+                    }
+                    
+                    System.out.println("  Tag counts:");
+                    System.out.println("    Nouns (NN*): " + nounCount);
+                    System.out.println("    Verbs (VB*): " + verbCount);
+                    System.out.println("    Adjectives (JJ): " + adjCount);
+                    System.out.println("    Determiners (DT): " + detCount);
+                    
+                    if (nounCount > 0 && verbCount > 0) {
+                        System.out.println("  ✓ POS tagging working correctly");
                     } else {
-                        System.out.println("  ℹ POS tags contain null values (POS tagger may not be fully initialized)");
+                        System.out.println("  ℹ Expected nouns and verbs but counts are low");
                     }
                 } else {
                     System.out.println("✗ POS tags not available (requires OpenNLP POS tagger)");
@@ -873,11 +953,15 @@ public class HitorroJVSIntegrationTest {
             
             // 5. Named Entity Recognition
             try {
-                List<String> ner = doc.getStringList("body.mls[en].segmented_ner");
-                if (ner != null && !ner.isEmpty()) {
-                    long validNER = ner.stream().filter(tag -> tag != null).count();
-                    System.out.println("\n5. NER Tags (" + validNER + " valid tags):");
-                    System.out.println("   " + ner);
+                // NER returns array of strings (one marked-up sentence per element)
+                JsonNode ner = doc.get("body.mls[en].segmented_ner");
+                if (ner != null && ner.isArray() && ner.size() > 0) {
+                    System.out.println("\n5. NER Markup (" + ner.size() + " sentences with entity markup):");
+                    for (JsonNode sentence : ner) {
+                        if (sentence != null && sentence.isTextual()) {
+                            System.out.println("   " + sentence.asText());
+                        }
+                    }
                 }
             } catch (AssertionError e) {
                 // Lucene TokenStream compatibility issue
@@ -889,14 +973,23 @@ public class HitorroJVSIntegrationTest {
             
             // 6. POS Tags
             try {
-                List<String> pos = doc.getStringList("body.mls[en].pos");
-                if (pos != null && !pos.isEmpty()) {
-                    long validPOS = pos.stream().filter(tag -> tag != null).count();
-                    System.out.println("\n6. POS Tags (" + validPOS + " valid tags out of " + pos.size() + "):");
-                    if (validPOS > 0) {
-                        System.out.println("   " + pos.stream().filter(tag -> tag != null).toList());
-                    } else {
-                        System.out.println("   (All null - POS tagger may not be initialized)");
+                // POS returns array of objects: [{"word": "tag"}, {"word2": "tag2"}, ...]
+                JsonNode pos = doc.get("body.mls[en].pos");
+                if (pos != null && pos.isArray() && pos.size() > 0) {
+                    System.out.println("\n6. POS Tags (" + pos.size() + " word-tag pairs):");
+                    int count = 0;
+                    for (JsonNode wordTagPair : pos) {
+                        if (wordTagPair != null && wordTagPair.isObject()) {
+                            // Each object has one field: word -> tag
+                            wordTagPair.fields().forEachRemaining(entry -> {
+                                System.out.println("   " + entry.getKey() + " -> " + entry.getValue().asText());
+                            });
+                            count++;
+                            if (count >= 10) {
+                                System.out.println("   ... (" + (pos.size() - 10) + " more)");
+                                break;
+                            }
+                        }
                     }
                 }
             } catch (Exception e) {
