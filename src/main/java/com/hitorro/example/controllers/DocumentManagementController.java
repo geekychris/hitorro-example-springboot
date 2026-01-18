@@ -380,6 +380,347 @@ public class DocumentManagementController {
         }
     }
     
+    /**
+     * Upload content to a document with optional rendition type.
+     * 
+     * @param id Document ID
+     * @param file File to upload
+     * @param rendition Rendition type (e.g., "original", "thumbnail", "pdf")
+     * @return Upload result
+     */
+    @Operation(
+        summary = "Upload content to document",
+        description = "Uploads a file to a document, optionally specifying a rendition type",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Content uploaded successfully"),
+            @ApiResponse(responseCode = "404", description = "Document not found")
+        }
+    )
+    @PostMapping("/documents/{id}/content")
+    public ResponseEntity<Map<String, Object>> uploadContent(
+            @PathVariable @Parameter(description = "Document ID") Long id,
+            @RequestParam("file") @Parameter(description = "File to upload") MultipartFile file,
+            @RequestParam(required = false) @Parameter(description = "Rendition type") String rendition) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            Document document = (Document) session.getSingleObjectById(Document.class, id);
+            
+            if (document == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Create content object
+            Content content = new Content();
+            
+            // Set rendition type in store name if provided
+            String storeName = rendition != null ? rendition : "original";
+            content.setStoreName(storeName);
+            
+            // Determine content type
+            ContentType contentType = ContentTypeCache.getCache().getTypeFromFileWithDefault(file.getOriginalFilename());
+            
+            // Save file content
+            try (InputStream inputStream = file.getInputStream()) {
+                content.setContent(file.getOriginalFilename(), inputStream, contentType);
+            }
+            
+            // Add content to document
+            document.getContents().add(content);
+            
+            session.saveOrUpdate(document);
+            session.commit();
+            
+            logger.info("Uploaded content: documentId={}, fileName={}, size={}, rendition={}", 
+                    id, file.getOriginalFilename(), file.getSize(), storeName);
+            
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "success");
+            response.put("message", "Content uploaded successfully");
+            response.put("contentId", content.getId());
+            response.put("fileName", file.getOriginalFilename());
+            response.put("size", file.getSize());
+            response.put("rendition", storeName);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Error uploading content", e);
+            if (session != null) {
+                session.rollback();
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Create a secondary rendition from existing content.
+     * 
+     * @param documentId Document ID
+     * @param contentId Source content ID
+     * @param file Rendition file
+     * @param renditionType Type of rendition (e.g., "thumbnail", "preview", "pdf")
+     * @return Created rendition info
+     */
+    @Operation(
+        summary = "Create secondary rendition",
+        description = "Creates a secondary rendition derived from an existing content",
+        responses = {
+            @ApiResponse(responseCode = "201", description = "Rendition created successfully"),
+            @ApiResponse(responseCode = "404", description = "Document or content not found")
+        }
+    )
+    @PostMapping("/documents/{documentId}/content/{contentId}/renditions")
+    public ResponseEntity<Map<String, Object>> createRendition(
+            @PathVariable @Parameter(description = "Document ID") Long documentId,
+            @PathVariable @Parameter(description = "Source content ID") Long contentId,
+            @RequestParam("file") @Parameter(description = "Rendition file") MultipartFile file,
+            @RequestParam @Parameter(description = "Rendition type") String renditionType) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            Document document = (Document) session.getSingleObjectById(Document.class, documentId);
+            if (document == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Content sourceContent = (Content) session.getSingleObjectById(Content.class, contentId);
+            if (sourceContent == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+            
+            // Create rendition content
+            Content rendition = new Content();
+            rendition.setStoreName(renditionType);
+            
+            // Set parent rendition to link them
+            rendition.setParentRendition(sourceContent);
+            
+            // Determine content type
+            ContentType contentType = ContentTypeCache.getCache().getTypeFromFileWithDefault(file.getOriginalFilename());
+            
+            // Save file content
+            try (InputStream inputStream = file.getInputStream()) {
+                rendition.setContent(file.getOriginalFilename(), inputStream, contentType);
+            }
+            
+            // Add rendition to document
+            document.getContents().add(rendition);
+            
+            session.saveOrUpdate(document);
+            session.commit();
+            
+            logger.info("Created rendition: documentId={}, sourceContentId={}, renditionId={}, type={}", 
+                    documentId, contentId, rendition.getId(), renditionType);
+            
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "success");
+            response.put("message", "Rendition created successfully");
+            response.put("renditionId", rendition.getId());
+            response.put("sourceContentId", contentId);
+            response.put("renditionType", renditionType);
+            response.put("fileName", file.getOriginalFilename());
+            response.put("size", file.getSize());
+            
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            
+        } catch (Exception e) {
+            logger.error("Error creating rendition", e);
+            if (session != null) {
+                session.rollback();
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * List all renditions for a content item.
+     * 
+     * @param documentId Document ID
+     * @param contentId Content ID
+     * @return List of renditions
+     */
+    @Operation(
+        summary = "List content renditions",
+        description = "Lists all renditions derived from a specific content",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Renditions list retrieved"),
+            @ApiResponse(responseCode = "404", description = "Content not found")
+        }
+    )
+    @GetMapping("/documents/{documentId}/content/{contentId}/renditions")
+    public ResponseEntity<List<ContentResponse>> listRenditions(
+            @PathVariable @Parameter(description = "Document ID") Long documentId,
+            @PathVariable @Parameter(description = "Content ID") Long contentId) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            Content content = (Content) session.getSingleObjectById(Content.class, contentId);
+            if (content == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            List<ContentResponse> renditions = content.getRenditions().stream()
+                    .map(this::toContentResponse)
+                    .collect(Collectors.toList());
+            
+            return ResponseEntity.ok(renditions);
+            
+        } catch (Exception e) {
+            logger.error("Error listing renditions", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Download content or specific content by ID.
+     * 
+     * @param documentId Document ID
+     * @param contentId Optional content ID (downloads first content if not specified)
+     * @return Content file
+     */
+    @Operation(
+        summary = "Download content",
+        description = "Downloads a document's content file. If contentId is not specified, downloads the first content.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Content downloaded"),
+            @ApiResponse(responseCode = "404", description = "Document or content not found")
+        }
+    )
+    @GetMapping("/documents/{documentId}/content/{contentId}/download")
+    public ResponseEntity<byte[]> downloadContent(
+            @PathVariable @Parameter(description = "Document ID") Long documentId,
+            @PathVariable @Parameter(description = "Content ID") Long contentId) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            Content content = (Content) session.getSingleObjectById(Content.class, contentId);
+            if (content == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (InputStream is = content.getContent()) {
+                is.transferTo(baos);
+            }
+            byte[] data = baos.toByteArray();
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", content.getOriginalFileName());
+            headers.setContentLength(data.length);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(data);
+            
+        } catch (Exception e) {
+            logger.error("Error downloading content", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Download first content from document.
+     * 
+     * @param documentId Document ID
+     * @return Content file
+     */
+    @Operation(
+        summary = "Download document content",
+        description = "Downloads the first content from a document",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Content downloaded"),
+            @ApiResponse(responseCode = "404", description = "Document or content not found")
+        }
+    )
+    @GetMapping("/documents/{documentId}/content/download")
+    public ResponseEntity<byte[]> downloadFirstContent(
+            @PathVariable @Parameter(description = "Document ID") Long documentId) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            Document document = (Document) session.getSingleObjectById(Document.class, documentId);
+            if (document == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            if (document.getContents().isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Content content = document.getContents().iterator().next();
+            
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (InputStream is = content.getContent()) {
+                is.transferTo(baos);
+            }
+            byte[] data = baos.toByteArray();
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", content.getOriginalFileName());
+            headers.setContentLength(data.length);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(data);
+            
+        } catch (Exception e) {
+            logger.error("Error downloading content", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
     // ========================================================================
     // Versioning
     // ========================================================================
@@ -897,6 +1238,180 @@ public class DocumentManagementController {
     }
     
     // ========================================================================
+    // Container CRUD Operations
+    // ========================================================================
+    
+    /**
+     * Create a new container (folder).
+     */
+    @Operation(
+        summary = "Create a new container",
+        description = "Creates a new container (folder) for organizing documents"
+    )
+    @PostMapping("/containers")
+    public ResponseEntity<ContainerInfo> createContainer(
+            @RequestBody @Parameter(description = "Container creation request") CreateContainerRequest request) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            Container container = new Container();
+            container.setQueryString(request.getName());
+            container.setDescription(request.getDescription());
+            
+            session.persist(container);
+            session.commit();
+            
+            logger.info("Created container: id={}, name={}", container.getId(), request.getName());
+            
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(toContainerInfo(container));
+                    
+        } catch (Exception e) {
+            logger.error("Error creating container", e);
+            if (session != null) {
+                session.rollback();
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Get a container by ID.
+     */
+    @Operation(
+        summary = "Get container by ID",
+        description = "Retrieves a container by its ID"
+    )
+    @GetMapping("/containers/{id}")
+    public ResponseEntity<ContainerInfo> getContainer(
+            @PathVariable @Parameter(description = "Container ID") Long id) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            Container container = (Container) session.getSingleObjectById(Container.class, id);
+            
+            if (container == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            return ResponseEntity.ok(toContainerInfo(container));
+            
+        } catch (Exception e) {
+            logger.error("Error getting container", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * List all root containers (those without a parent).
+     */
+    @Operation(
+        summary = "List root containers",
+        description = "Lists all root-level containers for building a hierarchy tree"
+    )
+    @GetMapping("/containers")
+    public ResponseEntity<List<ContainerInfo>> listRootContainers() {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            // Query for all containers (simplified - in production you'd filter by parent)
+            String hql = "from Container c order by c.queryString";
+            var query = session.createQuery(hql);
+            query.setMaxResults(100);
+            
+            List<Container> containers = query.getResultList();
+            
+            List<ContainerInfo> response = containers.stream()
+                    .map(this::toContainerInfo)
+                    .collect(Collectors.toList());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Error listing containers", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Delete a container.
+     */
+    @Operation(
+        summary = "Delete a container",
+        description = "Deletes a container (folder)"
+    )
+    @DeleteMapping("/containers/{id}")
+    public ResponseEntity<Map<String, Object>> deleteContainer(
+            @PathVariable @Parameter(description = "Container ID") Long id) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            Container container = (Container) session.getSingleObjectById(Container.class, id);
+            
+            if (container == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            session.delete(container);
+            session.commit();
+            
+            logger.info("Deleted container: id={}", id);
+            
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "success");
+            response.put("message", "Container deleted successfully");
+            response.put("containerId", id);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Error deleting container", e);
+            if (session != null) {
+                session.rollback();
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    // ========================================================================
     // Category Management
     // ========================================================================
     
@@ -1392,5 +1907,16 @@ public class DocumentManagementController {
         
         public String getValue() { return value; }
         public void setValue(String value) { this.value = value; }
+    }
+    
+    public static class CreateContainerRequest {
+        private String name;
+        private String description;
+        
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
     }
 }

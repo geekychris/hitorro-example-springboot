@@ -47,22 +47,21 @@ public class H2ConsoleConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
+        return http
             // Allow all requests (no authentication required)
             // For production, you'd want to secure specific endpoints
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/h2-console/**").permitAll()
+                .requestMatchers("/h2-console/**", "/api/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .anyRequest().permitAll()
             )
-            // Disable CSRF for H2 console
+            // Disable CSRF for H2 console and API
             .csrf(csrf -> csrf
-                .ignoringRequestMatchers("/h2-console/**")
+                .ignoringRequestMatchers("/h2-console/**", "/api/**")
             )
             // Allow frames for H2 console (it uses iframes)
             .headers(headers -> headers
-                .frameOptions(frame -> frame.sameOrigin())
-            );
-        
-        return http.build();
+                .frameOptions(frameOptions -> frameOptions.sameOrigin())
+            )
+            .build();
     }
 }

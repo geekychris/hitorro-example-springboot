@@ -246,8 +246,13 @@ public class DMSCrawlerController {
                         }
                     }
                 } catch (Exception e) {
-                    logger.error("Error processing file: " + file.getAbsolutePath(), e);
-                    result.addError("Failed to process " + file.getName() + ": " + e.getMessage());
+                    String errorMsg = e.getMessage();
+                    // Make null pointer errors more informative
+                    if (errorMsg != null && errorMsg.contains("ContentType") && errorMsg.contains("null")) {
+                        errorMsg = "ContentType not found for file (DMS may need ContentType records initialized)";
+                    }
+                    logger.warn("Error processing file: {} - {}", file.getName(), errorMsg);
+                    result.addError("Failed to process " + file.getName() + ": " + errorMsg);
                 }
             }
             
@@ -284,6 +289,25 @@ public class DMSCrawlerController {
         String mimeType = detectContentType(file);
         ContentTypeCache cache = ContentTypeCache.getCache();
         ContentType contentType = cache.getContentTypeByMimeType(mimeType);
+        
+        // If no content type found, try to get or create a default one
+        if (contentType == null) {
+            // Try common fallbacks
+            contentType = cache.getContentTypeByMimeType("application/octet-stream");
+            
+            // If still null, try getting any available content type as a fallback
+            if (contentType == null) {
+                contentType = cache.getContentTypeByMimeType("text/plain");
+            }
+            
+            // If still null, create a simple document without content attachment
+            if (contentType == null) {
+                logger.warn("No ContentType available for file: {} (mime: {}). Creating document without content attachment.", 
+                           file.getName(), mimeType);
+                // Just save the document metadata without content
+                return doc;
+            }
+        }
         
         // Set file content using Document.setContent with InputStream
         try (FileInputStream fis = new FileInputStream(file)) {
