@@ -135,10 +135,12 @@ export const typeSystemApi = {
     api.post<any>('/jvs/field', { json, fieldPath }),
 };
 
-// CommandDef API - Uses existing CommandRestController from hitorro-spring-boot-starter
+// CommandDef API - Uses Hitorro CommandRegistry with @CommandDef annotation scanning
 export const commandApi = {
-  listCommands: () =>
-    api.get<CommandDefInfo[]>('/commands/list'),
+  listCommands: (includeInternal?: boolean) =>
+    api.get<CommandDefInfo[]>('/commands/list', {
+      params: { includeInternal: includeInternal || false }
+    }),
   
   getCommand: (commandName: string) =>
     api.get<CommandDefInfo>(`/commands/${commandName}`),

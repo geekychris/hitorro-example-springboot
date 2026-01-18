@@ -8,16 +8,30 @@ import type { CommandDefInfo, CommandExecuteRequest } from '../types/api';
 export default function CommandsPage() {
   const [selectedCommand, setSelectedCommand] = useState<CommandDefInfo | null>(null);
   const [executionResult, setExecutionResult] = useState<any>(null);
+  const [includeInternal, setIncludeInternal] = useState<boolean>(false);
 
-  const { data: commands, isLoading } = useQuery({
-    queryKey: ['commands'],
-    queryFn: () => commandApi.listCommands().then(res => res.data),
+  const { data: commands, isLoading, error } = useQuery({
+    queryKey: ['commands', includeInternal],
+    queryFn: async () => {
+      console.log('[CommandsPage] Fetching commands (includeInternal:', includeInternal, ')...');
+      const response = await commandApi.listCommands(includeInternal);
+      console.log('[CommandsPage] Got response:', response);
+      console.log('[CommandsPage] Commands data:', response.data);
+      console.log('[CommandsPage] Commands count:', response.data?.length);
+      return response.data;
+    },
   });
 
   const executeMutation = useMutation({
     mutationFn: (request: CommandExecuteRequest) => commandApi.executeCommand(request),
     onSuccess: (response) => {
+      console.log('[CommandsPage] Command executed successfully');
+      console.log('[CommandsPage] Response:', response);
+      console.log('[CommandsPage] Response.data:', response.data);
       setExecutionResult(response.data);
+    },
+    onError: (error) => {
+      console.error('[CommandsPage] Command execution failed:', error);
     },
   });
 
@@ -30,16 +44,39 @@ export default function CommandsPage() {
             CommandDef Executor
           </span>
         </div>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
           Execute methods annotated with @CommandDef. These are automatically discovered and
           registered from Spring beans and core Hitorro classes.
         </p>
+
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={includeInternal}
+              onChange={(e) => setIncludeInternal(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span>Show internal commands</span>
+          </label>
+          {commands && (
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              ({commands.length} command{commands.length !== 1 ? 's' : ''})
+            </span>
+          )}
+        </div>
 
         <div className="grid grid-2">
           <div>
             <h4 style={{ marginBottom: '0.5rem' }}>Available Commands</h4>
             {isLoading ? (
               <div className="loading">Loading commands...</div>
+            ) : error ? (
+              <div className="alert alert-error">
+                Error loading commands: {(error as Error).message}
+                <br/>
+                <small>Check browser console for details</small>
+              </div>
             ) : commands && commands.length > 0 ? (
               <CommandList
                 commands={commands}
@@ -48,7 +85,9 @@ export default function CommandsPage() {
               />
             ) : (
               <div className="alert alert-warning">
-                No commands available. The CommandDef controller may not be implemented yet.
+                No commands available. API returned: {JSON.stringify(commands)}
+                <br/>
+                <small>Check browser console for details</small>
               </div>
             )}
           </div>
@@ -75,10 +114,13 @@ export default function CommandsPage() {
         </div>
 
         {executionResult && (
-          <ExecutionResult
-            result={executionResult}
-            onClear={() => setExecutionResult(null)}
-          />
+          <>
+            {console.log('[CommandsPage] Rendering ExecutionResult with:', executionResult)}
+            <ExecutionResult
+              result={executionResult}
+              onClear={() => setExecutionResult(null)}
+            />
+          </>
         )}
 
         {executeMutation.error && (
@@ -111,38 +153,48 @@ function CommandList({
       }}
     >
       {commands.map((command) => (
-        <div
-          key={command.name}
-          onClick={() => onSelect(command)}
-          style={{
-            padding: '1rem',
-            cursor: 'pointer',
-            borderBottom: '1px solid var(--border)',
-            background: selectedCommand?.name === command.name ? 'var(--background)' : undefined,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-                {command.name}
-              </div>
-              {command.description && (
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  {command.description}
+                  <div
+            key={command.name}
+            onClick={() => onSelect(command)}
+            style={{
+              padding: '1rem',
+              cursor: 'pointer',
+              borderBottom: '1px solid var(--border)',
+              background: selectedCommand?.name === command.name ? 'var(--background)' : undefined,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {command.name}
+                  {command.internal && (
+                    <span className="badge" style={{ 
+                      background: 'var(--warning)', 
+                      color: 'white', 
+                      fontSize: '0.625rem',
+                      padding: '0.125rem 0.375rem'
+                    }}>
+                      INTERNAL
+                    </span>
+                  )}
                 </div>
-              )}
-              <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                <span className="badge badge-primary">{command.parameters.length} params</span>
-                {command.returnType && (
-                  <span className="badge badge-primary" style={{ marginLeft: '0.5rem' }}>
-                    → {command.returnType}
-                  </span>
+                {command.description && (
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                    {command.description}
+                  </div>
                 )}
+                <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                  <span className="badge badge-primary">{command.parameters.length} params</span>
+                  {command.returnType && (
+                    <span className="badge badge-primary" style={{ marginLeft: '0.5rem' }}>
+                      → {command.returnType}
+                    </span>
+                  )}
+                </div>
               </div>
+              <ChevronRight size={16} />
             </div>
-            <ChevronRight size={16} />
           </div>
-        </div>
       ))}
     </div>
   );
@@ -301,15 +353,49 @@ function ExecutionResult({
   result: any;
   onClear: () => void;
 }) {
+  const [viewMode, setViewMode] = useState<'json' | 'table'>('json');
+  
+  // Check if result is a table (array of objects with same keys)
+  const isTableData = Array.isArray(result.result) && 
+    result.result.length > 0 && 
+    result.result.every((item: any) => typeof item === 'object' && item !== null);
+  
+  // Check if result is a single object with key-value pairs
+  const isSingleObject = result.result && 
+    typeof result.result === 'object' && 
+    !Array.isArray(result.result);
+  
+  const canShowAsTable = isTableData || isSingleObject;
+  
   return (
     <div style={{ marginTop: '1.5rem' }}>
       <hr style={{ margin: '1.5rem 0', border: 'none', borderTop: '1px solid var(--border)' }} />
       
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
         <h4>Execution Result</h4>
-        <button className="button button-secondary" onClick={onClear}>
-          Clear
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {canShowAsTable && (
+            <div style={{ display: 'flex', gap: '0.25rem', marginRight: '0.5rem' }}>
+              <button 
+                className={`button ${viewMode === 'json' ? 'button-primary' : 'button-secondary'}`}
+                onClick={() => setViewMode('json')}
+                style={{ padding: '0.375rem 0.75rem', fontSize: '0.875rem' }}
+              >
+                JSON
+              </button>
+              <button 
+                className={`button ${viewMode === 'table' ? 'button-primary' : 'button-secondary'}`}
+                onClick={() => setViewMode('table')}
+                style={{ padding: '0.375rem 0.75rem', fontSize: '0.875rem' }}
+              >
+                Table
+              </button>
+            </div>
+          )}
+          <button className="button button-secondary" onClick={onClear}>
+            Clear
+          </button>
+        </div>
       </div>
 
       <div
@@ -350,7 +436,9 @@ function ExecutionResult({
               maxHeight: '400px',
             }}
           >
-            {typeof result.result === 'object' ? (
+            {viewMode === 'table' && canShowAsTable ? (
+              <ResultTable data={result.result} />
+            ) : typeof result.result === 'object' ? (
               <ReactJson
                 src={result.result}
                 theme="rjv-default"
@@ -369,5 +457,54 @@ function ExecutionResult({
         </div>
       )}
     </div>
+  );
+}
+
+function ResultTable({ data }: { data: any }) {
+  // Convert single object to array of key-value pairs
+  const tableData = Array.isArray(data) ? data : 
+    Object.entries(data).map(([key, value]) => ({ key, value }));
+  
+  if (tableData.length === 0) {
+    return <div>No data</div>;
+  }
+  
+  // Get all unique keys from all objects
+  const keys = Array.from(
+    new Set(tableData.flatMap((item: any) => Object.keys(item)))
+  );
+  
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+      <thead>
+        <tr style={{ borderBottom: '2px solid var(--border)' }}>
+          {keys.map(key => (
+            <th key={key} style={{ 
+              padding: '0.5rem', 
+              textAlign: 'left', 
+              fontWeight: 600,
+              background: 'var(--background)'
+            }}>
+              {key}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {tableData.map((row: any, idx: number) => (
+          <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+            {keys.map(key => (
+              <td key={key} style={{ padding: '0.5rem' }}>
+                {typeof row[key] === 'object' && row[key] !== null ? (
+                  <code style={{ fontSize: '0.75rem' }}>{JSON.stringify(row[key])}</code>
+                ) : (
+                  String(row[key] ?? '')
+                )}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

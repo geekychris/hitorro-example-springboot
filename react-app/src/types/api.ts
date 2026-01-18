@@ -159,6 +159,7 @@ export interface CommandDefInfo {
   description: string;
   parameters: CommandParameter[];
   returnType: string;
+  internal: boolean;
 }
 
 export interface CommandParameter {
