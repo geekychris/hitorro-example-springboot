@@ -122,16 +122,16 @@ public class DMSCrawlerController {
             
             result.setStoreName(storeName != null ? storeName : "default");
             
-            // Create root container for this crawl
-            Container rootContainer = createRootContainer(session, rootPath, store);
-            session.persist(rootContainer);
+            // Create root folder for this crawl
+            Folder rootFolder = createRootFolder(session, rootPath, store);
+            session.persist(rootFolder);
             session.commit();
             
-            result.setRootContainerId(rootContainer.getGuid());
+            result.setRootContainerId(rootFolder.getGuid());
             result.setRootContainerName("Crawl_" + rootPath.getFileName());
             
             // Start crawling
-            crawlDirectoryRecursive(session, rootPath, rootContainer, store, recursive, maxDepth, 0, result);
+            crawlDirectoryRecursive(session, rootPath, rootFolder, store, recursive, maxDepth, 0, result);
             
             session.commit();
             result.setEndTime(new Date());
@@ -167,13 +167,14 @@ public class DMSCrawlerController {
     }
     
     /**
-     * Create root container for the crawl.
+     * Create root folder for the crawl.
      */
-    private Container createRootContainer(DMSSession session, Path rootPath, Store store) {
-        Container container = new Container();
-        container.setQueryString("Crawl: " + rootPath.getFileName());
-        container.setDescription("Imported from filesystem: " + rootPath.toAbsolutePath());
-        return container;
+    private Folder createRootFolder(DMSSession session, Path rootPath, Store store) {
+        Folder folder = new Folder();
+        folder.setName(rootPath.getFileName().toString());
+        folder.setDescription("Imported from filesystem: " + rootPath.toAbsolutePath());
+        folder.setIsRootLevel(true);
+        return folder;
     }
     
     /**
@@ -182,7 +183,7 @@ public class DMSCrawlerController {
     private void crawlDirectoryRecursive(
             DMSSession session,
             Path currentPath,
-            Container parentContainer,
+            Folder parentFolder,
             Store store,
             boolean recursive,
             int maxDepth,
@@ -210,17 +211,17 @@ public class DMSCrawlerController {
             for (File file : files) {
                 try {
                     if (file.isDirectory()) {
-                        // Create container for subdirectory
+                        // Create folder for subdirectory
                         if (recursive) {
-                            Container subContainer = createContainer(session, file, parentContainer, store);
-                            session.persist(subContainer);
+                            Folder subFolder = createFolder(session, file, parentFolder, store);
+                            session.persist(subFolder);
                             result.incrementDirectories();
                             
                             // Recurse into subdirectory
                             crawlDirectoryRecursive(
                                 session, 
                                 file.toPath(), 
-                                subContainer, 
+                                subFolder, 
                                 store, 
                                 recursive, 
                                 maxDepth, 
@@ -235,7 +236,7 @@ public class DMSCrawlerController {
                         }
                     } else {
                         // Create document for file
-                        Document doc = createDocumentFromFile(session, file, parentContainer, store);
+                        Document doc = createDocumentFromFile(session, file, parentFolder, store);
                         session.persist(doc);
                         result.incrementFiles();
                         result.addFilePath(file.getAbsolutePath());
@@ -263,27 +264,39 @@ public class DMSCrawlerController {
     }
     
     /**
-     * Create a Container for a directory.
+     * Create a Folder for a directory.
+     * Folders support hierarchical nesting through the Container many-to-many relationship.
      */
-    private Container createContainer(DMSSession session, File dir, Container parent, Store store) {
-        Container container = new Container();
-        container.setQueryString(dir.getName());
-        container.setDescription("Directory: " + dir.getAbsolutePath());
-        // Note: Container parent-child relationships would be set here if supported
-        return container;
+    private Folder createFolder(DMSSession session, File dir, Folder parent, Store store) {
+        Folder folder = new Folder();
+        folder.setName(dir.getName());
+        folder.setDescription("Directory: " + dir.getAbsolutePath());
+        folder.setIsRootLevel(false);
+        
+        // Add this folder to its parent folder to create hierarchical relationship
+        // This allows folders to be linked to multiple parents (many-to-many)
+        if (parent != null) {
+            folder.addContainer(parent);
+        }
+        
+        return folder;
     }
     
     /**
      * Create a Document from a file with Content.
      */
-    private Document createDocumentFromFile(DMSSession session, File file, Container parent, Store store) 
+    private Document createDocumentFromFile(DMSSession session, File file, Folder parent, Store store) 
             throws IOException, StoreException {
         
         Document doc = new Document();
         doc.setTitle(file.getName());
         doc.setNote("Imported from: " + file.getAbsolutePath());
-        // Note: Document parent-child relationships would be set here if supported
-        // The hierarchy is maintained through the crawler's recursive structure
+        
+        // Add document to parent folder to maintain directory hierarchy
+        // Documents can belong to multiple folders (many-to-many relationship)
+        if (parent != null) {
+            doc.addContainer(parent);
+        }
         
         // Detect content type
         String mimeType = detectContentType(file);

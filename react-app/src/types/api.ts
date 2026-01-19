@@ -14,6 +14,7 @@ export interface Document {
   authorId?: number;
   authorName?: string;
   categories: CategoryInfo[];
+  containers: ContainerInfo[];
   contentCount: number;
   canonicalId?: number;
   parentVersionId?: number;
@@ -49,8 +50,11 @@ export interface VersionInfo {
 export interface ContainerInfo {
   id: number;
   guid: string;
+  name?: string;
   description: string;
   type: string;
+  parentContainerIds?: number[];  // Multiple parents supported (many-to-many)
+  documentCount?: number;
 }
 
 export interface CreateDocumentRequest {

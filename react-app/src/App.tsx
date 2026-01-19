@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './App.css';
-import DMSPage from './pages/DMSPage';
+import DMSPageEnhanced from './pages/DMSPageEnhanced';
 import CrawlerPage from './pages/CrawlerPage';
 import TypeSystemPage from './pages/TypeSystemPage';
 import CommandsPage from './pages/CommandsPage';
@@ -40,7 +40,7 @@ function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dms':
-        return <DMSPage />;
+        return <DMSPageEnhanced />;
       case 'crawler':
         return <CrawlerPage />;
       case 'types':

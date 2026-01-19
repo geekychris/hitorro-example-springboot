@@ -36,6 +36,9 @@ export const dmsApi = {
   updateDocument: (id: number, data: UpdateDocumentRequest) =>
     api.put<Document>(`/dms/documents/${id}`, data),
   
+  checkoutDocument: (id: number, versionType: 'major' | 'minor' = 'major') =>
+    api.put<Document>(`/dms/documents/${id}/checkout?versionType=${versionType}`),
+
   deleteDocument: (id: number) =>
     api.delete(`/dms/documents/${id}`),
   
@@ -99,8 +102,8 @@ export const dmsApi = {
     }),
   
   // Containers
-  createContainer: (name: string, description?: string) =>
-    api.post<ContainerInfo>('/dms/containers', { name, description }),
+  createContainer: (name: string, description?: string, parentContainerId?: number) =>
+    api.post<ContainerInfo>('/dms/containers', { name, description, parentContainerId }),
   
   getContainer: (id: number) =>
     api.get<ContainerInfo>(`/dms/containers/${id}`),

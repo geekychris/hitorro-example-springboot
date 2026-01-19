@@ -144,9 +144,25 @@ public class DocumentManagementController {
             // Persist the document - Hibernate event listeners will trigger OnNew/BeforePersist
             // which initializes GUID, canonicalGuid, and parentVersion automatically
             session.persist(document);
-            session.commit();
             
-            logger.info("Created document: id={}, title={}", document.getId(), document.getTitle());
+            // Add document to containers if specified
+            if (request.getContainerIds() != null && !request.getContainerIds().isEmpty()) {
+                for (Long containerId : request.getContainerIds()) {
+                    Container container = (Container) session.getSingleObjectById(Container.class, containerId);
+                    if (container != null) {
+                        document.addContainer(container);
+                        logger.info("Added document {} to container {}", document.getId(), container.getId());
+                    } else {
+                        logger.warn("Container with ID {} not found", containerId);
+                    }
+                }
+            }
+            
+            session.commit();
+
+            logger.info("Created document: id={}, title={}, containers={}", 
+                       document.getId(), document.getTitle(), 
+                       request.getContainerIds() != null ? request.getContainerIds().size() : 0);
             
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(toDocumentResponse(document));
@@ -278,6 +294,69 @@ public class DocumentManagementController {
     }
     
     /**
+     * Checkout a document to create a new major version.
+     * 
+     * @param id Document ID
+     * @return New major version document
+     */
+    @Operation(
+        summary = "Checkout document (major version)",
+        description = "Creates a new major version of the document (e.g., 1.0 -> 2.0)",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "New major version created"),
+            @ApiResponse(responseCode = "404", description = "Document not found")
+        }
+    )
+    @PutMapping("/documents/{id}/checkout")
+    public ResponseEntity<DocumentResponse> checkoutDocument(
+            @PathVariable @Parameter(description = "Document ID") Long id,
+            @RequestParam(required = false, defaultValue = "major") @Parameter(description = "Version type: 'major' or 'minor'") String versionType) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            Document document = (Document) session.getSingleObjectById(Document.class, id);
+            
+            if (document == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Create new version using Hitorro's built-in versioning
+            Document newVersion;
+            if ("minor".equalsIgnoreCase(versionType)) {
+                newVersion = (Document) document.createMinorVersion();
+                logger.info("Created minor version: {} -> {}", document.getVersionLabel(), newVersion.getVersionLabel());
+            } else {
+                newVersion = (Document) document.createMajorVersion();
+                logger.info("Created major version: {} -> {}", document.getVersionLabel(), newVersion.getVersionLabel());
+            }
+            
+            session.persist(newVersion);
+            session.commit();
+            
+            logger.info("Created new version of document: originalId={}, newVersionId={}, oldVersion={}, newVersion={}", 
+                    id, newVersion.getId(), document.getVersionLabel(), newVersion.getVersionLabel());
+            
+            return ResponseEntity.ok(toDocumentResponse(newVersion));
+            
+        } catch (Exception e) {
+            logger.error("Error checking out document", e);
+            if (session != null) {
+                session.rollback();
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+
+    /**
      * Delete a document.
      * 
      * @param id Document ID
@@ -334,6 +413,239 @@ public class DocumentManagementController {
     }
     
     /**
+     * Delete all documents from the database.
+     * WARNING: This is a destructive operation that cannot be undone!
+     * 
+     * @param confirm Must be "yes" to confirm deletion
+     * @return Response with deletion count
+     */
+    @Operation(
+        summary = "Delete ALL documents",
+        description = "Deletes ALL documents from the database. WARNING: This is destructive and cannot be undone! You must pass confirm=yes to execute.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Documents deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Confirmation required"),
+            @ApiResponse(responseCode = "503", description = "DMS session unavailable")
+        }
+    )
+    @DeleteMapping("/documents/all")
+    public ResponseEntity<Map<String, Object>> deleteAllDocuments(
+            @RequestParam @Parameter(description = "Must be 'yes' to confirm deletion", required = true) String confirm) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        if (!"yes".equalsIgnoreCase(confirm)) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "error");
+            response.put("message", "You must pass confirm=yes to delete all documents");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            // Get all documents using HQL
+            @SuppressWarnings("unchecked")
+            List<Document> allDocuments = session.createQuery("from Document").list();
+            int count = allDocuments.size();
+            
+            logger.warn("DELETING ALL DOCUMENTS - Count: {}", count);
+            
+            // Delete each document
+            for (Document doc : allDocuments) {
+                session.delete(doc);
+            }
+            
+            session.commit();
+            
+            logger.info("Successfully deleted {} documents", count);
+            
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "success");
+            response.put("message", "All documents deleted successfully");
+            response.put("deletedCount", count);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Error deleting all documents", e);
+            if (session != null) {
+                session.rollback();
+            }
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "error");
+            response.put("message", "Error deleting documents: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Delete all containers (folders) from the database.
+     * WARNING: This is a destructive operation that cannot be undone!
+     * 
+     * @param confirm Must be "yes" to confirm deletion
+     * @return Response with deletion count
+     */
+    @Operation(
+        summary = "Delete ALL containers/folders",
+        description = "Deletes ALL containers and folders from the database. WARNING: This is destructive and cannot be undone! You must pass confirm=yes to execute.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Containers deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Confirmation required"),
+            @ApiResponse(responseCode = "503", description = "DMS session unavailable")
+        }
+    )
+    @DeleteMapping("/containers/all")
+    public ResponseEntity<Map<String, Object>> deleteAllContainers(
+            @RequestParam @Parameter(description = "Must be 'yes' to confirm deletion", required = true) String confirm) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        if (!"yes".equalsIgnoreCase(confirm)) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "error");
+            response.put("message", "You must pass confirm=yes to delete all containers");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            // Get all containers using HQL
+            @SuppressWarnings("unchecked")
+            List<Container> allContainers = session.createQuery("from Container").list();
+            int count = allContainers.size();
+            
+            logger.warn("DELETING ALL CONTAINERS - Count: {}", count);
+            
+            // Delete each container
+            for (Container container : allContainers) {
+                session.delete(container);
+            }
+            
+            session.commit();
+            
+            logger.info("Successfully deleted {} containers", count);
+            
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "success");
+            response.put("message", "All containers deleted successfully");
+            response.put("deletedCount", count);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Error deleting all containers", e);
+            if (session != null) {
+                session.rollback();
+            }
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "error");
+            response.put("message", "Error deleting containers: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
+     * Delete ALL DMS data (documents, containers, and content).
+     * WARNING: This is the most destructive operation - it wipes the entire DMS!
+     * 
+     * @param confirm Must be "DELETE_EVERYTHING" to confirm
+     * @return Response with deletion counts
+     */
+    @Operation(
+        summary = "Delete EVERYTHING in DMS",
+        description = "Deletes ALL documents, containers, folders, and content. WARNING: This wipes the entire DMS database! You must pass confirm=DELETE_EVERYTHING to execute.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "All data deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Confirmation required"),
+            @ApiResponse(responseCode = "503", description = "DMS session unavailable")
+        }
+    )
+    @DeleteMapping("/all")
+    public ResponseEntity<Map<String, Object>> deleteEverything(
+            @RequestParam @Parameter(description = "Must be 'DELETE_EVERYTHING' to confirm", required = true) String confirm) {
+        
+        if (sessionFactory == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        
+        if (!"DELETE_EVERYTHING".equals(confirm)) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "error");
+            response.put("message", "You must pass confirm=DELETE_EVERYTHING to delete all DMS data");
+            response.put("hint", "This is a safety measure. Use: DELETE /api/dms/all?confirm=DELETE_EVERYTHING");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        DMSSession session = null;
+        try {
+            session = sessionFactory.createSession();
+            
+            // Get counts before deletion using HQL
+            @SuppressWarnings("unchecked")
+            List<Document> allDocuments = session.createQuery("from Document").list();
+            @SuppressWarnings("unchecked")
+            List<Container> allContainers = session.createQuery("from Container").list();
+            int docCount = allDocuments.size();
+            int containerCount = allContainers.size();
+            
+            logger.warn("DELETING EVERYTHING - Documents: {}, Containers: {}", docCount, containerCount);
+            
+            // Delete documents first
+            for (Document doc : allDocuments) {
+                session.delete(doc);
+            }
+            
+            // Then delete containers
+            for (Container container : allContainers) {
+                session.delete(container);
+            }
+            
+            session.commit();
+            
+            logger.info("Successfully deleted ALL DMS data - Documents: {}, Containers: {}", docCount, containerCount);
+            
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "success");
+            response.put("message", "All DMS data deleted successfully");
+            response.put("documentsDeleted", docCount);
+            response.put("containersDeleted", containerCount);
+            response.put("totalDeleted", docCount + containerCount);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            logger.error("Error deleting all DMS data", e);
+            if (session != null) {
+                session.rollback();
+            }
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("status", "error");
+            response.put("message", "Error deleting DMS data: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+    
+    /**
      * List all content for a document.
      * 
      * @param id Document ID
@@ -347,7 +659,7 @@ public class DocumentManagementController {
             @ApiResponse(responseCode = "404", description = "Document not found")
         }
     )
-    @GetMapping("/documents/{id}/content/list")
+    @GetMapping({"/documents/{id}/content/list", "/documents/{id}/content"})
     public ResponseEntity<List<ContentResponse>> listContent(
             @PathVariable @Parameter(description = "Document ID") Long id) {
         
@@ -418,14 +730,22 @@ public class DocumentManagementController {
             // Create content object
             Content content = new Content();
             
+            // Set required fields BEFORE persisting
+            content.setOriginalFileName(file.getOriginalFilename());
+            
             // Set rendition type in store name if provided
-            String storeName = rendition != null ? rendition : "original";
-            content.setStoreName(storeName);
+            String storeName = rendition != null ? rendition : "default";
+            
+            // Get the default store - Content needs a valid store
+            Store defaultStore = com.hitorro.basedms.StoreUtil.getDefaultStore();
+            if (defaultStore != null) {
+                content.setStoreName(defaultStore.getSoftGuid());
+            }
             
             // Determine content type
             ContentType contentType = ContentTypeCache.getCache().getTypeFromFileWithDefault(file.getOriginalFilename());
             
-            // Save file content
+            // Save file content - this will also persist the content
             try (InputStream inputStream = file.getInputStream()) {
                 content.setContent(file.getOriginalFilename(), inputStream, contentType);
             }
@@ -434,6 +754,7 @@ public class DocumentManagementController {
             document.getContents().add(content);
             
             session.saveOrUpdate(document);
+            session.saveOrUpdate(content);
             session.commit();
             
             logger.info("Uploaded content: documentId={}, fileName={}, size={}, rendition={}", 
@@ -1260,17 +1581,29 @@ public class DocumentManagementController {
         try {
             session = sessionFactory.createSession();
             
-            Container container = new Container();
-            container.setQueryString(request.getName());
-            container.setDescription(request.getDescription());
+            // Create a Folder (which extends Container) for proper naming support
+            Folder folder = new Folder();
+            folder.setName(request.getName());
+            folder.setDescription(request.getDescription());
             
-            session.persist(container);
+            // If parent container ID is provided, add this folder to that parent
+            if (request.getParentContainerId() != null) {
+                Container parentContainer = (Container) session.getSingleObjectById(Container.class, request.getParentContainerId());
+                if (parentContainer != null) {
+                    folder.addContainer(parentContainer);
+                    logger.info("Adding folder '{}' to parent container id={}", request.getName(), request.getParentContainerId());
+                } else {
+                    logger.warn("Parent container id={} not found, creating root folder", request.getParentContainerId());
+                }
+            }
+            
+            session.persist(folder);
             session.commit();
             
-            logger.info("Created container: id={}, name={}", container.getId(), request.getName());
+            logger.info("Created folder: id={}, name={}, parentId={}", folder.getId(), request.getName(), request.getParentContainerId());
             
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(toContainerInfo(container));
+                    .body(toContainerInfo(folder));
                     
         } catch (Exception e) {
             logger.error("Error creating container", e);
@@ -1345,11 +1678,13 @@ public class DocumentManagementController {
             query.setMaxResults(100);
             
             List<Container> containers = query.getResultList();
-            
+
+            // Use the version with document count for better UI display
+            final DMSSession finalSession = session;
             List<ContainerInfo> response = containers.stream()
-                    .map(this::toContainerInfo)
+                    .map(c -> toContainerInfoWithCount(c, finalSession))
                     .collect(Collectors.toList());
-            
+
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
@@ -1570,6 +1905,12 @@ public class DocumentManagementController {
             response.setParentVersionId(document.getParentVersion().getId());
         }
         
+        // Containers/Folders that contain this document
+        List<ContainerInfo> containers = document.getContainers().stream()
+                .map(this::toContainerInfo)
+                .collect(Collectors.toList());
+        response.setContainers(containers);
+
         return response;
     }
     
@@ -1600,7 +1941,85 @@ public class DocumentManagementController {
         info.setGuid(container.getGuid());
         info.setDescription(container.getDescription());
         info.setType(container.getClass().getSimpleName());
+        
+        // If this is a Folder, include additional metadata
+        if (container instanceof Folder) {
+            Folder folder = (Folder) container;
+            info.setName(folder.getName());
+        }
+        
+        // Get parent container IDs from the many-to-many relationship
+        Set<com.hitorro.base.objects.Container> containers = container.getContainers();
+        if (containers != null && !containers.isEmpty()) {
+            List<Long> parentIds = new ArrayList<>();
+            for (com.hitorro.base.objects.Container parent : containers) {
+                parentIds.add(parent.getId());
+            }
+            info.setParentContainerIds(parentIds);
+        }
+        
+        // Document count will be set to 0 by default
+        // To get accurate count, use toContainerInfoWithCount(container, session) instead
+        info.setDocumentCount(0);
+
         return info;
+    }
+    
+    private ContainerInfo toContainerInfoWithCount(Container container, DMSSession session) {
+        ContainerInfo info = toContainerInfo(container);
+        
+        // Query document count for this container AND all child containers recursively
+        try {
+            // First get direct documents
+            @SuppressWarnings("unchecked")
+            List<Long> directCounts = session.createQuery(
+                "select count(d) from Document d join d.containers c where c.id = :containerId"
+            ).setParameter("containerId", container.getId()).list();
+            
+            int totalCount = directCounts != null && !directCounts.isEmpty() ? directCounts.get(0).intValue() : 0;
+            
+            // Then recursively count documents in child containers
+            totalCount += getChildContainerDocumentCount(container.getId(), session);
+            
+            info.setDocumentCount(totalCount);
+        } catch (Exception e) {
+            // If query fails, leave at 0
+            logger.debug("Could not get document count for container {}: {}", container.getId(), e.getMessage());
+        }
+        
+        return info;
+    }
+    
+    /**
+     * Recursively count documents in child containers.
+     */
+    private int getChildContainerDocumentCount(Long parentContainerId, DMSSession session) {
+        try {
+            // Get all child containers
+            @SuppressWarnings("unchecked")
+            List<Container> children = session.createQuery(
+                "select c from Container c join c.containers parent where parent.id = :parentId"
+            ).setParameter("parentId", parentContainerId).list();
+            
+            int count = 0;
+            for (Container child : children) {
+                // Count documents in this child
+                @SuppressWarnings("unchecked")
+                List<Long> childDocs = session.createQuery(
+                    "select count(d) from Document d join d.containers c where c.id = :containerId"
+                ).setParameter("containerId", child.getId()).list();
+                
+                count += childDocs != null && !childDocs.isEmpty() ? childDocs.get(0).intValue() : 0;
+                
+                // Recursively count documents in grandchildren
+                count += getChildContainerDocumentCount(child.getId(), session);
+            }
+            
+            return count;
+        } catch (Exception e) {
+            logger.debug("Error counting child container documents: {}", e.getMessage());
+            return 0;
+        }
     }
     
     private void collectVersions(VersionableObject vo, List<VersionInfo> versions) {
@@ -1636,14 +2055,15 @@ public class DocumentManagementController {
         private String creator;
         private String realm;
         private List<CategoryRequest> categories;
-        
+        private List<Long> containerIds;
+
         // Getters and setters
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
-        
+
         public String getNote() { return note; }
         public void setNote(String note) { this.note = note; }
-        
+
         public Long getAuthorId() { return authorId; }
         public void setAuthorId(Long authorId) { this.authorId = authorId; }
         
@@ -1655,6 +2075,9 @@ public class DocumentManagementController {
         
         public List<CategoryRequest> getCategories() { return categories; }
         public void setCategories(List<CategoryRequest> categories) { this.categories = categories; }
+        
+        public List<Long> getContainerIds() { return containerIds; }
+        public void setContainerIds(List<Long> containerIds) { this.containerIds = containerIds; }
     }
     
     public static class UpdateDocumentRequest {
@@ -1744,10 +2167,11 @@ public class DocumentManagementController {
         private Long authorId;
         private String authorName;
         private List<CategoryInfo> categories;
+        private List<ContainerInfo> containers;
         private int contentCount;
         private Long canonicalId;
         private Long parentVersionId;
-        
+
         // Getters and setters
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
@@ -1788,6 +2212,9 @@ public class DocumentManagementController {
         public List<CategoryInfo> getCategories() { return categories; }
         public void setCategories(List<CategoryInfo> categories) { this.categories = categories; }
         
+        public List<ContainerInfo> getContainers() { return containers; }
+        public void setContainers(List<ContainerInfo> containers) { this.containers = containers; }
+
         public int getContentCount() { return contentCount; }
         public void setContentCount(int contentCount) { this.contentCount = contentCount; }
         
@@ -1873,21 +2300,33 @@ public class DocumentManagementController {
     public static class ContainerInfo {
         private Long id;
         private String guid;
+        private String name;
         private String description;
         private String type;
-        
+        private List<Long> parentContainerIds;
+        private Integer documentCount;
+
         // Getters and setters
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
-        
+
         public String getGuid() { return guid; }
         public void setGuid(String guid) { this.guid = guid; }
-        
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
-        
+
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }
+
+        public List<Long> getParentContainerIds() { return parentContainerIds; }
+        public void setParentContainerIds(List<Long> parentContainerIds) { this.parentContainerIds = parentContainerIds; }
+
+        public Integer getDocumentCount() { return documentCount; }
+        public void setDocumentCount(Integer documentCount) { this.documentCount = documentCount; }
     }
     
     public static class CategoryInfo {
@@ -1912,11 +2351,15 @@ public class DocumentManagementController {
     public static class CreateContainerRequest {
         private String name;
         private String description;
-        
+        private Long parentContainerId;
+
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
-        
+
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
+        
+        public Long getParentContainerId() { return parentContainerId; }
+        public void setParentContainerId(Long parentContainerId) { this.parentContainerId = parentContainerId; }
     }
 }

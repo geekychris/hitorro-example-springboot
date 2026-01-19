@@ -2,10 +2,22 @@
 
 server:
   port: 8080
+  # Tomcat Configuration for large file uploads
+  tomcat:
+    max-swallow-size: 500MB       # Maximum size for POST data (avoids connection reset)
+    max-http-form-post-size: 500MB  # Maximum size for POST requests
 
 spring:
   application:
     name: hitorro-example
+  
+  # Multipart File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 500MB        # Maximum file size (default is 1MB)
+      max-request-size: 500MB     # Maximum request size (default is 10MB)
+      file-size-threshold: 2KB    # Files larger than this are written to disk
   
   # H2 Database Configuration - File-based (persistent)
   datasource:
@@ -77,6 +89,7 @@ hitorro:
     enabled: true
     db-init: true  # Enable service framework db-init for proper initialization
     load:
+      - com.hitorro.basedms.db.HibernateService  # Hibernate service (handles entity registration including Folder)
       - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
       - com.hitorro.util.testframework.TestServerService  # Load TestServerService (required by unittime)
   
