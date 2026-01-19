@@ -165,7 +165,7 @@ function CommandList({
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontWeight: 600, marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ fontWeight: 600, marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {command.name}
                   {command.internal && (
                     <span className="badge" style={{ 
@@ -175,6 +175,16 @@ function CommandList({
                       padding: '0.125rem 0.375rem'
                     }}>
                       INTERNAL
+                    </span>
+                  )}
+                  {command.restOperations && command.restOperations.length > 0 && (
+                    <span className="badge" style={{ 
+                      background: '#6366f1', 
+                      color: 'white', 
+                      fontSize: '0.625rem',
+                      padding: '0.125rem 0.375rem'
+                    }}>
+                      REST
                     </span>
                   )}
                 </div>
@@ -259,10 +269,36 @@ function CommandExecutor({
   return (
     <div>
       <div style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--background)', borderRadius: '0.375rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>{command.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+          <div style={{ fontWeight: 600 }}>{command.name}</div>
+          {command.restOperations && command.restOperations.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              {command.restOperations.map((method) => (
+                <span
+                  key={method}
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '0.25rem',
+                    background: method === 'GET' ? '#10b981' : method === 'POST' ? '#3b82f6' : method === 'PUT' ? '#f59e0b' : method === 'DELETE' ? '#ef4444' : '#6b7280',
+                    color: 'white',
+                    fontWeight: 600
+                  }}
+                >
+                  {method}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         {command.description && (
-          <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             {command.description}
+          </div>
+        )}
+        {command.restOperations && command.restOperations.length > 0 && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', background: 'var(--background)', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>
+            REST: {command.restOperations[0]} /api/rest/{command.name}
           </div>
         )}
       </div>

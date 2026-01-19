@@ -78,6 +78,7 @@ hitorro:
     db-init: true  # Enable service framework db-init for proper initialization
     load:
       - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
+      - com.hitorro.util.testframework.TestServerService  # Load TestServerService (required by unittime)
   
   # Hitorro-specific properties (will be converted to JVSProperties)
   hitorro-properties:

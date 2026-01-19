@@ -5,6 +5,8 @@ import DMSPage from './pages/DMSPage';
 import CrawlerPage from './pages/CrawlerPage';
 import TypeSystemPage from './pages/TypeSystemPage';
 import CommandsPage from './pages/CommandsPage';
+import RestExplorerPage from './pages/RestExplorerPage';
+import ServicesExplorerPage from './pages/ServicesExplorerPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,7 +17,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'commands';
+type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services';
 
 interface Tab {
   id: TabId;
@@ -28,6 +30,8 @@ const tabs: Tab[] = [
   { id: 'crawler', label: 'Filesystem Crawler', description: 'Import files and directories into DMS' },
   { id: 'types', label: 'Type System', description: 'JSON Type System enrichment and field exploration' },
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },
+  { id: 'rest', label: 'REST API Explorer', description: 'Discover and test REST endpoints with streaming support' },
+  { id: 'services', label: 'Services', description: 'Explore Hitorro services and dependency hierarchy' },
 ];
 
 function App() {
@@ -43,6 +47,10 @@ function App() {
         return <TypeSystemPage />;
       case 'commands':
         return <CommandsPage />;
+      case 'rest':
+        return <RestExplorerPage />;
+      case 'services':
+        return <ServicesExplorerPage />;
       default:
         return <div>Select a tab</div>;
     }

@@ -160,6 +160,7 @@ export interface CommandDefInfo {
   parameters: CommandParameter[];
   returnType: string;
   internal: boolean;
+  restOperations?: string[];  // HTTP methods this command supports (GET, POST, etc.)
 }
 
 export interface CommandParameter {
