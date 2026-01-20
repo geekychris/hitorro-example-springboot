@@ -26,7 +26,7 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'dms', label: 'Document Management', description: 'Manage documents, containers, versions, and content' },
+  { id: 'dms', label: 'Document Management', description: 'Manage documents, containers, versions, and content (includes transformer)' },
   { id: 'crawler', label: 'Filesystem Crawler', description: 'Import files and directories into DMS' },
   { id: 'types', label: 'Type System', description: 'JSON Type System enrichment and field exploration' },
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },

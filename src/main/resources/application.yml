@@ -92,6 +92,7 @@ hitorro:
       - com.hitorro.basedms.db.HibernateService  # Hibernate service (handles entity registration including Folder)
       - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
       - com.hitorro.util.testframework.TestServerService  # Load TestServerService (required by unittime)
+      - com.hitorro.basedms.transformer.TransformerService  # Transformer service for content renditions
   
   # Hitorro-specific properties (will be converted to JVSProperties)
   hitorro-properties:
@@ -170,6 +171,12 @@ hitorro:
     
     # Actuator endpoint
     actuator-enabled: true
+  
+  # Transformer Configuration - Content rendition and transformation
+  transformer:
+    enabled: true  # Enable transformer auto-configuration
+    rest:
+      enabled: true  # Enable REST API endpoints for transformations
 
 
 

@@ -19,7 +19,8 @@ import {
   Hash,
   Calendar,
   User,
-  Database
+  Database,
+  RefreshCw
 } from 'lucide-react';
 import { dmsApi } from '../services/api';
 import type { Document, CreateDocumentRequest, ContainerInfo, VersionInfo } from '../types/api';
@@ -34,6 +35,9 @@ export default function DMSPageEnhanced() {
   const [editForm, setEditForm] = useState<{title: string; note: string}>({title: '', note: ''});
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [showTransformer, setShowTransformer] = useState(false);
+  const [selectedContent, setSelectedContent] = useState<any>(null);
+  const [transformations, setTransformations] = useState<any[]>([]);
   const queryClient = useQueryClient();
 
   // Query all containers
@@ -840,28 +844,57 @@ export default function DMSPageEnhanced() {
                               </div>
                             )}
                           </div>
-                          <button
-                            style={{
-                              padding: '0.5rem 0.75rem',
-                              background: 'var(--primary)',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '0.8rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.35rem',
-                              marginLeft: '1rem'
-                            }}
-                            onClick={() => {
-                              // Download this specific content
-                              window.open(`/api/dms/documents/${selectedDocument.id}/content/${content.id}/download`, '_blank');
-                            }}
-                          >
-                            <Download size={12} />
-                            Download
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                              style={{
+                                padding: '0.5rem 0.75rem',
+                                background: 'var(--primary)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem'
+                              }}
+                              onClick={() => {
+                                window.open(`/api/dms/documents/${selectedDocument.id}/content/${content.id}/download`, '_blank');
+                              }}
+                            >
+                              <Download size={12} />
+                              Download
+                            </button>
+                            <button
+                              style={{
+                                padding: '0.5rem 0.75rem',
+                                background: '#667eea',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem'
+                              }}
+                              onClick={async () => {
+                                setSelectedContent(content);
+                                // Fetch available transformations
+                                try {
+                                  const response = await fetch(`/api/transformer/content/${content.guid}/available-transformations`);
+                                  const data = await response.json();
+                                  setTransformations(data.transformations || []);
+                                  setShowTransformer(true);
+                                } catch (error) {
+                                  alert('Error loading transformations: ' + error);
+                                }
+                              }}
+                            >
+                              <RefreshCw size={12} />
+                              Transform
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1132,6 +1165,169 @@ export default function DMSPageEnhanced() {
                 }}
               >
                 Create Document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transformer Modal */}
+      {showTransformer && selectedContent && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '12px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <RefreshCw size={20} />
+                Transform Content
+              </h3>
+              <button
+                onClick={() => {
+                  setShowTransformer(false);
+                  setSelectedContent(null);
+                  setTransformations([]);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{
+              padding: '1rem',
+              background: 'var(--surface)',
+              borderRadius: '8px',
+              marginBottom: '1.5rem'
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                {selectedContent.originalFileName || selectedContent.fileName || 'Content'}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Type: {selectedContent.contentType} • Size: {(selectedContent.size / 1024).toFixed(1)} KB
+              </div>
+            </div>
+
+            {transformations.length === 0 ? (
+              <div style={{
+                padding: '2rem',
+                textAlign: 'center',
+                color: 'var(--text-secondary)'
+              }}>
+                <p>No transformations available for this content type.</p>
+                <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                  Make sure transformer dependencies are installed.
+                </p>
+              </div>
+            ) : (
+              <>
+                <h4 style={{ marginBottom: '1rem', fontSize: '0.95rem' }}>
+                  Available Transformations ({transformations.length})
+                </h4>
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {transformations.map((trans: any, idx: number) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: '1rem',
+                        border: '2px solid var(--border)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        ':hover': {
+                          borderColor: 'var(--primary)',
+                          background: 'var(--surface)'
+                        }
+                      }}
+                      onClick={async () => {
+                        if (!confirm(`Transform ${selectedContent.originalFileName || 'content'} to ${trans.targetMimeType}?`)) {
+                          return;
+                        }
+
+                        try {
+                          const response = await fetch('/api/transformer/queue', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              sourceContentGuid: selectedContent.guid,
+                              targetMimeType: trans.targetMimeType,
+                              methodName: trans.method,
+                              methodArgs: trans.methodArgs,
+                              tags: [`transform-${Date.now()}`]
+                            })
+                          });
+
+                          if (response.ok) {
+                            const result = await response.json();
+                            alert(`✅ Transformation queued successfully!\n\nJob ID: ${result.jobId}\nThe transformed content will be added as a rendition when processing completes.`);
+                            setShowTransformer(false);
+                            setSelectedContent(null);
+                            setTransformations([]);
+                          } else {
+                            const error = await response.text();
+                            alert('Error queuing transformation: ' + error);
+                          }
+                        } catch (error) {
+                          alert('Error: ' + error);
+                        }
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FileText size={16} />
+                        Convert to: {trans.targetMimeType}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        Method: {trans.method} ({trans.transformer})
+                        {trans.methodArgs && <div style={{ marginTop: '0.25rem' }}>Args: {trans.methodArgs}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <button
+                onClick={() => {
+                  setShowTransformer(false);
+                  setSelectedContent(null);
+                  setTransformations([]);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: 'var(--secondary, #6c757d)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem'
+                }}
+              >
+                Close
               </button>
             </div>
           </div>
