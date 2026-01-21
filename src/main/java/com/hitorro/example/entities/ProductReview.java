@@ -75,10 +75,12 @@ public class ProductReview extends Document {
     @Column(name = "reviewer_name", length = 255)
     private String reviewerName;
     
-    @Column(name = "pros", columnDefinition = "TEXT")
+    @Lob
+    @Column(name = "pros")
     private String pros;
     
-    @Column(name = "cons", columnDefinition = "TEXT")
+    @Lob
+    @Column(name = "cons")
     private String cons;
     
     @Column(name = "verified", nullable = false)

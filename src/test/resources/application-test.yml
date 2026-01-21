@@ -72,7 +72,7 @@ hitorro:
 logging:
   level:
     root: WARN
-    com.hitorro: INFO
+    com.hitorro: DEBUG
     com.hitorro.spring: INFO
     org.hibernate: WARN
     org.hibernate.tool.schema: ERROR  # Suppress DDL warnings about duplicate indexes
