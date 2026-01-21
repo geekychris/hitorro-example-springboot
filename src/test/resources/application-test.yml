@@ -42,6 +42,7 @@ hitorro:
     db-init: true  # Enable service framework db-init for proper initialization
     load:
       - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
+      - com.hitorro.example.services.ExampleDMSService  # Load custom entities (ProductReview)
   # Hitorro-specific properties (will be converted to JVSProperties)
   hitorro-properties:
     network.disablelocalhostcheck: true

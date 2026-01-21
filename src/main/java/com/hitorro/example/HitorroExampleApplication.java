@@ -39,7 +39,8 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 @EntityScan(basePackages = {
     "com.hitorro.base.objects",      // Hitorro base entities (NamedLongEntry, etc.)
     "com.hitorro.basedms",           // Hitorro DMS entities
-    "com.hitorro.example"            // Application entities (if any)
+    "com.hitorro.example",           // Application entities (if any)
+    "com.hitorro.example.entities"   // Custom DMS entities (ProductReview, etc.)
 })
 public class HitorroExampleApplication {
 
