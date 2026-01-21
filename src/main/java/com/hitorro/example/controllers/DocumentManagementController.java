@@ -676,10 +676,11 @@ public class DocumentManagementController {
                 return ResponseEntity.notFound().build();
             }
             
-            List<ContentResponse> contentList = document.getContents().stream()
+            // Get all content including renditions (recursively)
+            List<ContentResponse> contentList = document.getAllContentsRecursively().stream()
                     .map(this::toContentResponse)
                     .collect(Collectors.toList());
-            
+
             return ResponseEntity.ok(contentList);
             
         } catch (Exception e) {
@@ -742,8 +743,45 @@ public class DocumentManagementController {
                 content.setStoreName(defaultStore.getSoftGuid());
             }
             
-            // Determine content type
-            ContentType contentType = ContentTypeCache.getCache().getTypeFromFileWithDefault(file.getOriginalFilename());
+            // Determine content type - try to get by MIME type from the uploaded file
+            String mimeType = file.getContentType();
+            ContentType contentType = null;
+            
+            if (mimeType != null && !mimeType.isEmpty()) {
+                // Try to get by MIME type first
+                contentType = ContentTypeCache.getCache().getContentTypeByMimeType(mimeType);
+            }
+            
+            if (contentType == null) {
+                // Fall back to filename-based lookup
+                contentType = ContentTypeCache.getCache().getTypeFromFileWithDefault(file.getOriginalFilename());
+            }
+            
+            // If still null or text/plain for a non-text file, try to create the correct type
+            if (contentType == null || 
+                (contentType.getMimeType().equals("text/plain") && mimeType != null && !mimeType.equals("text/plain"))) {
+                // Create the content type for the uploaded MIME type
+                contentType = new ContentType();
+                contentType.setMimeType(mimeType);
+                
+                // Extract extension from filename
+                String fileName = file.getOriginalFilename();
+                if (fileName != null && fileName.contains(".")) {
+                    String ext = fileName.substring(fileName.lastIndexOf("."));
+                    if (contentType.getExtensions() == null) {
+                        contentType.setExtensions(new java.util.HashSet<>());
+                    }
+                    Extension fileExt = new Extension();
+                    fileExt.setFileExtension(ext);
+                    contentType.getExtensions().add(fileExt);
+                }
+                
+                session.saveOrUpdate(contentType);
+                logger.info("Created ContentType: {} for file {}", mimeType, file.getOriginalFilename());
+            }
+            
+            logger.info("Using ContentType: {} (MIME: {}) for file {}", 
+                       contentType.getGuid(), contentType.getMimeType(), file.getOriginalFilename());
             
             // Save file content - this will also persist the content
             try (InputStream inputStream = file.getInputStream()) {
@@ -1913,10 +1951,11 @@ public class DocumentManagementController {
 
         return response;
     }
-    
-    private ContentResponse toContentResponse(com.hitorro.base.objects.Content content) {
+
+	private ContentResponse toContentResponse(com.hitorro.base.objects.Content content) {
         ContentResponse response = new ContentResponse();
         response.setId(content.getId());
+        response.setGuid(content.getGuid());  // Add GUID for transformation API
         response.setOriginalFileName(content.getOriginalFileName());
         response.setContentSize(content.getContentSize());
         response.setStoreName(content.getStoreName());
@@ -2227,6 +2266,7 @@ public class DocumentManagementController {
     
     public static class ContentResponse {
         private Long id;
+        private String guid;
         private String originalFileName;
         private long contentSize;
         private String storeName;
@@ -2241,6 +2281,9 @@ public class DocumentManagementController {
         // Getters and setters
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
+        
+        public String getGuid() { return guid; }
+        public void setGuid(String guid) { this.guid = guid; }
         
         public String getOriginalFileName() { return originalFileName; }
         public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }

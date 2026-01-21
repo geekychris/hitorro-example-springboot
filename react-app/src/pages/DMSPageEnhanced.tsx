@@ -633,8 +633,10 @@ export default function DMSPageEnhanced() {
                             await dmsApi.uploadContent(selectedDocument.id, uploadFile);
                             setShowUpload(false);
                             setUploadFile(null);
-                            // Refresh document
-                            window.location.reload();
+                            // Refresh only the content list for this document (keep document selected)
+                            queryClient.invalidateQueries({ queryKey: ['content', selectedDocument.id] });
+                            queryClient.invalidateQueries({ queryKey: ['documents', selectedContainerId] });
+                            alert('✅ Content uploaded successfully!');
                           } catch (error) {
                             alert('Error uploading file: ' + error);
                           }
@@ -880,13 +882,33 @@ export default function DMSPageEnhanced() {
                               }}
                               onClick={async () => {
                                 setSelectedContent(content);
-                                // Fetch available transformations
+                                // Fetch available transformations - use guid from backend
+                                const contentGuid = content.guid;
+                                console.log('Content object:', content);
+                                console.log('Using content GUID:', contentGuid);
+                                
+                                if (!contentGuid) {
+                                  alert('Error: Content GUID not found. Please refresh the page.');
+                                  return;
+                                }
+                                
                                 try {
-                                  const response = await fetch(`/api/transformer/content/${content.guid}/available-transformations`);
+                                  const response = await fetch(`/api/transformer/content/${contentGuid}/available-transformations`);
+                                  if (!response.ok) {
+                                    const errorText = await response.text();
+                                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                                  }
                                   const data = await response.json();
+                                  console.log('Transformation response:', data);
+                                  console.log('Content MIME type:', content.contentType);
+                                  console.log('Available transformations:', data.transformations);
                                   setTransformations(data.transformations || []);
                                   setShowTransformer(true);
+                                  if (!data.transformations || data.transformations.length === 0) {
+                                    console.warn('No transformations available for content type:', data.sourceMimeType);
+                                  }
                                 } catch (error) {
+                                  console.error('Error loading transformations:', error);
                                   alert('Error loading transformations: ' + error);
                                 }
                               }}
@@ -1268,15 +1290,27 @@ export default function DMSPageEnhanced() {
                         }
 
                         try {
+                          const contentGuid = selectedContent.guid;
+                          if (!contentGuid) {
+                            alert('Error: Content GUID not found');
+                            return;
+                          }
+                          
+                          // Get document GUID from selected document
+                          const documentGuid = selectedDocument?.guid;
+                          if (!documentGuid) {
+                            alert('Error: Document GUID not found');
+                            return;
+                          }
+                          
                           const response = await fetch('/api/transformer/queue', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                              sourceContentGuid: selectedContent.guid,
+                              documentGuid: documentGuid,
+                              contentGuid: contentGuid,
                               targetMimeType: trans.targetMimeType,
-                              methodName: trans.method,
-                              methodArgs: trans.methodArgs,
-                              tags: [`transform-${Date.now()}`]
+                              addAsChild: true
                             })
                           });
 
