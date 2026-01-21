@@ -155,7 +155,6 @@ export default function DMSPageEnhanced() {
       <div key={container.id}>
         <div
           style={{
-            paddingLeft: `${level * 1.5}rem`,
             padding: '0.5rem',
             paddingLeft: `${level * 1.5 + 0.5}rem`,
             cursor: 'pointer',
