@@ -28,6 +28,18 @@ spring:
         globally_quoted_identifiers: true
         # Continue on DDL errors (e.g., duplicate indexes)
         hbm2ddl.halt_on_error: false
+  
+  # Spring AI Configuration for Ollama (optional - only works if Ollama is running)
+  ai:
+    ollama:
+      base-url: ${OLLAMA_URL:http://localhost:11434}
+      chat:
+        options:
+          model: llama3.2
+          temperature: 0.7
+      embedding:
+        options:
+          model: nomic-embed-text
 
 hitorro:
   enabled: true
@@ -69,11 +81,18 @@ hitorro:
     # Type definitions path - uses HT_BIN by default
     type-definitions-path: ${HT_BIN:/Users/chris/hitorro}
 
+  # AI Service Configuration (optional - only enabled if Ollama is running)
+  ai:
+    enabled: true  # Enable AI service for testing
+    model-name: llama3.2
+
 logging:
   level:
     root: WARN
     com.hitorro: DEBUG
     com.hitorro.spring: INFO
+    com.hitorro.basedms.transformer.ai: INFO
+    org.springframework.ai: WARN
     org.hibernate: WARN
     org.hibernate.tool.schema: ERROR  # Suppress DDL warnings about duplicate indexes
     org.springframework.orm: WARN
