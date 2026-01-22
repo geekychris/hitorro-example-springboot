@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  FileText, 
-  FolderTree, 
-  Plus, 
-  Trash2, 
-  Edit, 
+import {
+  FileText,
+  FolderTree,
+  Plus,
+  Trash2,
+  Edit,
   Edit2,
   Upload,
   Download,
@@ -20,7 +20,12 @@ import {
   Calendar,
   User,
   Database,
-  RefreshCw
+  RefreshCw,
+  Check,
+  AlertCircle,
+  Layers,
+  ExternalLink,
+  Settings
 } from 'lucide-react';
 import { dmsApi } from '../services/api';
 import type { Document, CreateDocumentRequest, ContainerInfo, VersionInfo } from '../types/api';
@@ -32,12 +37,14 @@ export default function DMSPageEnhanced() {
   const [showCreateDocument, setShowCreateDocument] = useState(false);
   const [showCreateContainer, setShowCreateContainer] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState<{title: string; note: string}>({title: '', note: ''});
+  const [editForm, setEditForm] = useState<{ title: string; note: string }>({ title: '', note: '' });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showTransformer, setShowTransformer] = useState(false);
   const [selectedContent, setSelectedContent] = useState<any>(null);
   const [transformations, setTransformations] = useState<any[]>([]);
+  const [selectedTemplateGuid, setSelectedTemplateGuid] = useState<string | null>(null);
+  const [transformParameters, setTransformParameters] = useState<string>('');
   const queryClient = useQueryClient();
 
   // Query all containers
@@ -61,13 +68,13 @@ export default function DMSPageEnhanced() {
   // Query versions for selected document
   const { data: versions = [] } = useQuery({
     queryKey: ['versions', selectedDocument?.id],
-    queryFn: () => 
-      selectedDocument 
-        ? dmsApi.getVersions(selectedDocument.id).then(res => res.data)
+    queryFn: () =>
+      selectedDocument
+        ? dmsApi.getVersionHistory(selectedDocument.id).then(res => res.data)
         : Promise.resolve([]),
     enabled: !!selectedDocument,
   });
-  
+
   // Fetch content list for selected document
   const { data: contentList } = useQuery({
     queryKey: ['content', selectedDocument?.id],
@@ -124,7 +131,7 @@ export default function DMSPageEnhanced() {
     if (container.name && container.name.trim()) {
       return container.name;
     }
-    
+
     // Otherwise, extract from description (format: "Directory: /path/to/folder")
     if (container.description) {
       const match = container.description.match(/Directory: (.+)$/);
@@ -137,7 +144,7 @@ export default function DMSPageEnhanced() {
       // If description doesn't match pattern, use it directly
       return container.description.substring(0, 50); // Truncate long descriptions
     }
-    
+
     // Fallback to type and ID
     return `${container.type} ${container.id}`;
   };
@@ -342,7 +349,7 @@ export default function DMSPageEnhanced() {
                     gap: '0.5rem'
                   }}
                   onClick={() => {
-                    setEditForm({title: selectedDocument.title, note: selectedDocument.note || ''});
+                    setEditForm({ title: selectedDocument.title, note: selectedDocument.note || '' });
                     setIsEditing(true);
                   }}
                 >
@@ -469,7 +476,7 @@ export default function DMSPageEnhanced() {
                   Download
                 </button>
               </div>
-              
+
               {/* Edit Dialog */}
               {isEditing && (
                 <div style={{
@@ -497,7 +504,7 @@ export default function DMSPageEnhanced() {
                       <input
                         type="text"
                         value={editForm.title}
-                        onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                         style={{
                           width: '100%',
                           padding: '0.5rem',
@@ -510,7 +517,7 @@ export default function DMSPageEnhanced() {
                       <label style={{ display: 'block', marginBottom: '0.5rem' }}>Note:</label>
                       <textarea
                         value={editForm.note}
-                        onChange={(e) => setEditForm({...editForm, note: e.target.value})}
+                        onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
                         rows={4}
                         style={{
                           width: '100%',
@@ -561,7 +568,7 @@ export default function DMSPageEnhanced() {
                   </div>
                 </div>
               )}
-              
+
               {/* Upload Dialog */}
               {showUpload && (
                 <div style={{
@@ -885,12 +892,12 @@ export default function DMSPageEnhanced() {
                                 const contentGuid = content.guid;
                                 console.log('Content object:', content);
                                 console.log('Using content GUID:', contentGuid);
-                                
+
                                 if (!contentGuid) {
                                   alert('Error: Content GUID not found. Please refresh the page.');
                                   return;
                                 }
-                                
+
                                 try {
                                   const response = await fetch(`/api/transformer/content/${contentGuid}/available-transformations`);
                                   if (!response.ok) {
@@ -934,7 +941,7 @@ export default function DMSPageEnhanced() {
           )}
         </div>
       </div>
-      
+
       {/* Create Container Dialog */}
       {showCreateContainer && (
         <div style={{
@@ -958,10 +965,10 @@ export default function DMSPageEnhanced() {
           }}>
             <h3 style={{ marginBottom: '1rem' }}>Create New Folder</h3>
             {selectedContainerId && (
-              <div style={{ 
-                marginBottom: '1rem', 
-                padding: '0.75rem', 
-                background: 'var(--primary-light)', 
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                background: 'var(--primary-light)',
                 borderRadius: '4px',
                 fontSize: '0.9rem'
               }}>
@@ -969,10 +976,10 @@ export default function DMSPageEnhanced() {
               </div>
             )}
             {!selectedContainerId && (
-              <div style={{ 
-                marginBottom: '1rem', 
-                padding: '0.75rem', 
-                background: 'var(--surface)', 
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                background: 'var(--surface)',
                 border: '1px solid var(--border)',
                 borderRadius: '4px',
                 fontSize: '0.9rem',
@@ -1060,7 +1067,7 @@ export default function DMSPageEnhanced() {
           </div>
         </div>
       )}
-      
+
       {/* Create Document Dialog */}
       {showCreateDocument && (
         <div style={{
@@ -1084,10 +1091,10 @@ export default function DMSPageEnhanced() {
           }}>
             <h3 style={{ marginBottom: '1rem' }}>Create New Document</h3>
             {selectedContainerId && (
-              <div style={{ 
-                marginBottom: '1rem', 
-                padding: '0.75rem', 
-                background: 'var(--primary-light)', 
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                background: 'var(--primary-light)',
                 borderRadius: '4px',
                 fontSize: '0.9rem'
               }}>
@@ -1095,10 +1102,10 @@ export default function DMSPageEnhanced() {
               </div>
             )}
             {!selectedContainerId && (
-              <div style={{ 
-                marginBottom: '1rem', 
-                padding: '0.75rem', 
-                background: 'var(--surface)', 
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                background: 'var(--surface)',
                 border: '1px solid var(--border)',
                 borderRadius: '4px',
                 fontSize: '0.9rem',
@@ -1154,12 +1161,12 @@ export default function DMSPageEnhanced() {
                   const titleInput = document.getElementById('docTitleInput') as HTMLInputElement;
                   const descInput = document.getElementById('docDescInput') as HTMLTextAreaElement;
                   const title = titleInput.value.trim();
-                  
+
                   if (!title) {
                     alert('Please enter a document title');
                     return;
                   }
-                  
+
                   try {
                     const response = await dmsApi.createDocument({
                       title,
@@ -1252,6 +1259,59 @@ export default function DMSPageEnhanced() {
               </div>
             </div>
 
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ marginBottom: '0.5rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileText size={16} />
+                Template (Optional)
+              </h4>
+              <select
+                value={selectedTemplateGuid || ''}
+                onChange={(e) => setSelectedTemplateGuid(e.target.value || null)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  background: 'var(--surface)',
+                  fontSize: '0.9rem'
+                }}
+              >
+                <option value="">-- No Template --</option>
+                {contentList?.data?.filter((c: any) => c.id !== selectedContent.id).map((c: any) => (
+                  <option key={c.guid} value={c.guid}>
+                    {c.originalFileName || c.fileName} ({c.contentType})
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+                Select a document to use as a template (e.g., a PDF form for data injection).
+              </p>
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ marginBottom: '0.5rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Settings size={16} />
+                Transformation Parameters (Optional JSON/CSV)
+              </h4>
+              <textarea
+                value={transformParameters}
+                onChange={(e) => setTransformParameters(e.target.value)}
+                placeholder='e.g., {"field1": "value1"}'
+                style={{
+                  width: '100%',
+                  height: '80px',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  background: 'var(--surface)',
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace'
+                }}
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+                Provide JSON data for template-based transformers or key=value pairs for others.
+              </p>
+            </div>
+
             {transformations.length === 0 ? (
               <div style={{
                 padding: '2rem',
@@ -1284,7 +1344,7 @@ export default function DMSPageEnhanced() {
                         }
                       }}
                       onClick={async () => {
-                        if (!confirm(`Transform ${selectedContent.originalFileName || 'content'} to ${trans.targetMimeType}?`)) {
+                        if (!confirm(`Transform ${selectedContent.originalFileName || 'content'} to ${trans.targetMimeType}${selectedTemplateGuid ? ' using selected template' : ''}?`)) {
                           return;
                         }
 
@@ -1294,14 +1354,14 @@ export default function DMSPageEnhanced() {
                             alert('Error: Content GUID not found');
                             return;
                           }
-                          
+
                           // Get document GUID from selected document
                           const documentGuid = selectedDocument?.guid;
                           if (!documentGuid) {
                             alert('Error: Document GUID not found');
                             return;
                           }
-                          
+
                           const response = await fetch('/api/transformer/queue', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1309,7 +1369,9 @@ export default function DMSPageEnhanced() {
                               documentGuid: documentGuid,
                               contentGuid: contentGuid,
                               targetMimeType: trans.targetMimeType,
-                              addAsChild: true
+                              addAsChild: true,
+                              templateGuid: selectedTemplateGuid,
+                              parameters: transformParameters
                             })
                           });
 
@@ -1319,6 +1381,8 @@ export default function DMSPageEnhanced() {
                             setShowTransformer(false);
                             setSelectedContent(null);
                             setTransformations([]);
+                            setSelectedTemplateGuid(null);
+                            setTransformParameters('');
                           } else {
                             const error = await response.text();
                             alert('Error queuing transformation: ' + error);

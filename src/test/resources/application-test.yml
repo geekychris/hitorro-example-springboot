@@ -39,7 +39,7 @@ hitorro:
   
   services:
     enabled: true  # Enable service context manager
-    db-init: true  # Enable service framework db-init for proper initialization
+    db-init: false  # Disable db-init to avoid servlet context errors in tests
     load:
       - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
       - com.hitorro.example.services.ExampleDMSService  # Load custom entities (ProductReview)
@@ -47,8 +47,8 @@ hitorro:
   hitorro-properties:
     network.disablelocalhostcheck: true
     rpc.enableclustermember: false
-    # CRITICAL: dbinit property (no hyphen!) tells ServiceContext to run init with dbInit=true
-    dbinit: true
+    # CRITICAL: dbinit property (no hyphen!) tells ServiceContext to run init with dbInit=false for tests
+    dbinit: false
   dms:
     enabled: true  # Enable DMS for testing
     session-scope: prototype  # Use prototype scope for testing

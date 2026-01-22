@@ -312,7 +312,45 @@ public class TransformerIntegrationTest {
             BaseFile textResult = pdfToText.convert(result, "verify_csv", "layout=true", null, 5);
             File textFile = ((FileFile) textResult).getJavaFile();
             String content = new String(Files.readAllBytes(textFile.toPath()));
-            assertThat(content).as("PDF should contain the filled value").contains("Jane Doe");
+            assertThat(content).as("PDF should contain the filled value (legacy)").contains("Jane Doe");
+        }
+    }
+
+    @Test
+    public void testPDFTemplateTransformerWithExternalTemplate() throws Exception {
+        TransformMethod method = transformerService.getMethod("pdf_template");
+        assumeTrue(method != null, "PDFTemplate transformer not available");
+        assumeTrue(method.ensureServiceAvailable(), "pdftk not installed");
+
+        // Create a template PDF
+        File templatePdf = createTestFormPDF();
+        
+        // Create a JSON data file
+        File jsonData = new File(tempDir, "data.json");
+        try (FileWriter writer = new FileWriter(jsonData)) {
+            writer.write("{\"full_name\":\"External Template Doe\"}");
+        }
+
+        FileFileSystem ffs = new FileFileSystem(tempDir);
+        BaseFile dataFile = ffs.getFile("data.json");
+        
+        // Simulating the async parameter passing from TransformerUtil
+        String params = "_template_path=" + templatePdf.getAbsolutePath() + ",flatten=true";
+        BaseFile result = method.convert(dataFile, "test_external", params, null, 5);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getName()).endsWith(".pdf");
+        
+        File resultFile = ((FileFile) result).getJavaFile();
+        assertThat(resultFile.exists()).isTrue();
+
+        // Verify content by extracting text
+        TransformMethod pdfToText = transformerService.getMethod("pdf_to_text");
+        if (pdfToText != null && pdfToText.ensureServiceAvailable()) {
+            BaseFile textResult = pdfToText.convert(result, "verify_external", "layout=true", null, 5);
+            File textFile = ((FileFile) textResult).getJavaFile();
+            String content = new String(Files.readAllBytes(textFile.toPath()));
+            assertThat(content).as("PDF should contain the filled value from external data").contains("External Template Doe");
         }
     }
 
