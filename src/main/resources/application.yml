@@ -177,6 +177,11 @@ hitorro:
     enabled: true  # Enable transformer auto-configuration
     rest:
       enabled: true  # Enable REST API endpoints for transformations
+  
+  # Test Framework Configuration
+  test:
+    enabled: true  # Enable TestServerService
+    run-on-startup: true  # Disable automatic test execution on server startup
 
 
 
