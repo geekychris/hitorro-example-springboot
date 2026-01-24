@@ -13,7 +13,7 @@ NC='\033[0m'
 
 IMAGE_NAME="hitorro-app:latest"
 CONTAINER_NAME="hitorro-app"
-DOCKERFILE="/Users/chris/hitorro/hitorro-example-springboot/Dockerfile-with-ui"
+DOCKERFILE="/Users/chris/hitorro/hitorro-example-springboot/docker_build/Dockerfile-with-ui"
 BUILD_CONTEXT="/Users/chris/hitorro"
 
 echo -e "${BLUE}Starting Hitorro Container (6000 Port Range)${NC}"

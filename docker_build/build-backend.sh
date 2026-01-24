@@ -12,7 +12,7 @@ echo "Building Hitorro backend Docker image..."
 cd "$PROJECT_ROOT"
 
 docker build \
-    -f Dockerfile \
+    -f docker_build/Dockerfile \
     -t hitorro-example-springboot:latest \
     ..
 

@@ -43,12 +43,12 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Determine what to build
 if [ "$WITH_UI" == "backend" ] || [ "$WITH_UI" == "backend-only" ]; then
     echo -e "${YELLOW}Building backend only...${NC}"
-    DOCKERFILE="Dockerfile"
+    DOCKERFILE="docker_build/Dockerfile"
     IMAGE_TAG="latest"
     BUILD_MODE="backend"
 else
     echo -e "${YELLOW}Building with React UI...${NC}"
-    DOCKERFILE="Dockerfile-with-ui"
+    DOCKERFILE="docker_build/Dockerfile-with-ui"
     IMAGE_TAG="ui-latest"
     BUILD_MODE="ui"
 fi

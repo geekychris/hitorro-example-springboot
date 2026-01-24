@@ -81,7 +81,7 @@ check_docker() {
 build_backend() {
     echo -e "${BLUE}Building Hitorro (backend only)...${NC}"
     cd "$PROJECT_ROOT"
-    docker build -f Dockerfile -t "${IMAGE_NAME}:latest" ..
+    docker build -f docker_build/Dockerfile -t "${IMAGE_NAME}:latest" ..
     echo -e "${GREEN}✓ Build complete: ${IMAGE_NAME}:latest${NC}"
 }
 
@@ -90,7 +90,7 @@ build_ui() {
     echo -e "${BLUE}Building Hitorro with React UI...${NC}"
     echo "This will take a few minutes..."
     cd "$PROJECT_ROOT"
-    docker build -f Dockerfile-with-ui -t "${IMAGE_NAME}:ui-latest" ..
+    docker build -f docker_build/Dockerfile-with-ui -t "${IMAGE_NAME}:ui-latest" ..
     echo -e "${GREEN}✓ Build complete: ${IMAGE_NAME}:ui-latest${NC}"
 }
 
@@ -259,7 +259,7 @@ start_dev() {
 compose_up() {
     echo -e "${BLUE}Starting with docker-compose...${NC}"
     cd "$PROJECT_ROOT"
-    docker-compose up -d
+    docker-compose -f docker_build/docker-compose.yml up -d
     echo -e "${GREEN}✓ Services started${NC}"
     print_access_info
 }
@@ -268,7 +268,7 @@ compose_up() {
 compose_up_ui() {
     echo -e "${BLUE}Starting with docker-compose (UI)...${NC}"
     cd "$PROJECT_ROOT"
-    docker-compose -f docker-compose-with-ui.yml up -d
+    docker-compose -f docker_build/docker-compose-with-ui.yml up -d
     echo -e "${GREEN}✓ Services started${NC}"
     print_access_info_ui
 }
@@ -277,7 +277,7 @@ compose_up_ui() {
 compose_down() {
     echo -e "${BLUE}Stopping docker-compose services...${NC}"
     cd "$PROJECT_ROOT"
-    docker-compose down 2>/dev/null || docker-compose -f docker-compose-with-ui.yml down 2>/dev/null || true
+    docker-compose -f docker_build/docker-compose.yml down 2>/dev/null || docker-compose -f docker_build/docker-compose-with-ui.yml down 2>/dev/null || true
     echo -e "${GREEN}✓ Services stopped${NC}"
 }
 

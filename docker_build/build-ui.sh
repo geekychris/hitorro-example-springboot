@@ -20,7 +20,7 @@ echo ""
 cd "$PROJECT_ROOT"
 
 docker build \
-    -f Dockerfile-with-ui \
+    -f docker_build/Dockerfile-with-ui \
     -t hitorro-example-springboot:ui-latest \
     ..
 
