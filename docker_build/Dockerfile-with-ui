@@ -4,16 +4,16 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /frontend
 
-# Copy frontend package files
-COPY hitorro-example-springboot/frontend/package*.json ./
+# Copy react-app package files
+COPY hitorro-example-springboot/react-app/package*.json ./
 
-# Install dependencies (use npm install instead of ci for flexibility)
+# Install dependencies
 RUN npm install
 
-# Copy frontend source
-COPY hitorro-example-springboot/frontend/ ./
+# Copy react-app source
+COPY hitorro-example-springboot/react-app/ ./
 
-# Build React app
+# Build React app (TypeScript)
 RUN npm run build
 
 # Stage 2: Build the Spring Boot application with Maven
