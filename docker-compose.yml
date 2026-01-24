@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  hitorro-app:
+    build:
+      context: ..
+      dockerfile: hitorro-example-springboot/Dockerfile
+    image: hitorro-example-springboot:latest
+    container_name: hitorro-app
+    ports:
+      - "8080:8080"    # HTTP API
+      - "9000:9000"    # Telnet CLI
+      - "9022:9022"    # SSH CLI
+    environment:
+      # Spring Profile
+      - SPRING_PROFILES_ACTIVE=docker
+      
+      # Hitorro Configuration
+      - HT_BIN=/opt/hitorro
+      - HT_HOME=/var/lib/hitorro
+      
+      # Database Configuration (H2 file-based)
+      - SPRING_DATASOURCE_URL=jdbc:h2:file:/var/lib/hitorro/data/hitorrodb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=hitorro
+      
+      # JPA Configuration
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=false
+      
+      # Logging
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_COM_HITORRO=DEBUG
+      
+      # JVM Options (can be overridden)
+      - JAVA_OPTS=-Xmx2g -Xms512m -XX:+UseG1GC
+    volumes:
+      # Persistent data directory
+      - hitorro-data:/var/lib/hitorro/data
+      
+      # Configuration override (optional)
+      - ./docker/config:/var/lib/hitorro/config:ro
+      
+      # File storage
+      - hitorro-files:/opt/hitorro-app/data/files
+      
+      # Logs
+      - hitorro-logs:/var/lib/hitorro/logs
+    networks:
+      - hitorro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: PostgreSQL database (alternative to H2)
+  # Uncomment to use PostgreSQL instead of H2
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: hitorro-postgres
+  #   environment:
+  #     - POSTGRES_DB=hitorrodb
+  #     - POSTGRES_USER=hitorro
+  #     - POSTGRES_PASSWORD=hitorro_password
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   networks:
+  #     - hitorro-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U hitorro"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  hitorro-data:
+    driver: local
+  hitorro-files:
+    driver: local
+  hitorro-logs:
+    driver: local
+  # postgres-data:
+  #   driver: local
+
+networks:
+  hitorro-network:
+    driver: bridge

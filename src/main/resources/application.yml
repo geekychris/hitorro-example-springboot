@@ -1,0 +1,194 @@
+# Hitorro Spring Boot Example Application Configuration
+
+server:
+  port: 8080
+  # Tomcat Configuration for large file uploads
+  tomcat:
+    max-swallow-size: 500MB       # Maximum size for POST data (avoids connection reset)
+    max-http-form-post-size: 500MB  # Maximum size for POST requests
+
+spring:
+  application:
+    name: hitorro-example
+  
+  # Multipart File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 500MB        # Maximum file size (default is 1MB)
+      max-request-size: 500MB     # Maximum request size (default is 10MB)
+      file-size-threshold: 2KB    # Files larger than this are written to disk
+  
+  # H2 Database Configuration - File-based (persistent)
+  datasource:
+    url: jdbc:h2:file:./data/hitorrodb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: hitorro
+  
+  # H2 Console - Web-based database management UI
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        trace: false
+        web-allow-others: false  # Set to true to allow remote connections
+  
+  # JPA/Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: update  # Changed from 'create' to 'update' to preserve data across restarts
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false  # Disable SQL logging (too verbose)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        globally_quoted_identifiers: true
+        format_sql: true  # Pretty-print SQL
+
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: true
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,hitorro
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+
+# Hitorro Configuration
+hitorro:
+  enabled: true
+  
+  # Application name shown in CLI prompt
+  application-name: HitorroExample
+  
+  # Core Hitorro paths - RECOMMENDED: Set these in application.yml
+  # These will be automatically converted to HT_BIN and HT_HOME system properties
+  ht-bin: /Users/chris/hitorro      # Hitorro installation directory (contains config/, types/, etc.)
+  ht-home: /Users/chris/hthome      # Hitorro home directory (runtime data, logs, cache)
+  
+  # Service Configuration
+  services:
+    enabled: true
+    db-init: true  # Enable service framework db-init for proper initialization
+    load:
+      - com.hitorro.basedms.db.HibernateService  # Hibernate service (handles entity registration including Folder)
+      - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
+      - com.hitorro.util.testframework.TestServerService  # Load TestServerService (required by unittime)
+      - com.hitorro.basedms.transformer.TransformerService  # Transformer service for content renditions
+  
+  # Hitorro-specific properties (will be converted to JVSProperties)
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
+    # CRITICAL: dbinit property (no hyphen!) tells ServiceContext to run init with dbInit=true
+    # This triggers integration events to load Store and DomainInfo from CSV files
+    dbinit: true
+  
+  # JSON Type System Configuration
+  jvs:
+    enabled: true
+    nlp-enabled: false
+    # Legacy: type-definitions-path still supported for backward compatibility
+    # Prefer hitorro.ht-bin instead
+  
+  # DMS Configuration
+  dms:
+    enabled: true
+    session-scope: prototype
+    
+    # Database initialization from CSV files
+    # Disabled by default - Store objects require file system paths to be configured
+    # Enable and configure stores.csv if you need pre-configured content stores
+    db-init:
+      enabled: false
+      fail-on-error: false
+      data-sets:
+        - name: "stores"
+          csv-file: "classpath:data/stores.csv"
+          consumer: "com.hitorro.basedms.csvconsumers.StoreCSVConsumer"
+  
+  # REST endpoint configuration
+  rest:
+    enabled: true
+    base-path: /api/rest
+    expose-internal: false
+  
+  # Command REST endpoints
+  commands:
+    rest:
+      enabled: true
+      base-path: /api/commands
+  
+  # File System Configuration
+  filesystem:
+    # Local file system - Access to local files and directories
+    local:
+      enabled: true
+      base-path: ./data/files  # Base directory for local file operations
+    
+    # JAR file system - Access to files inside JAR archives
+    # Note: JarFileSystem exists but has limited implementation (may return null for operations)
+    jar:
+      enabled: false  # Disabled by default - enable when you have a JAR file to read
+      jar-path: ./example-resources.jar  # Path to JAR file to access
+    
+    # S3-compatible file system - MinIO, Wasabi, DigitalOcean Spaces, etc.
+    s3:
+      enabled: false  # Set to true to enable S3 filesystem
+      endpoint: http://localhost:9000  # MinIO local, or https://s3.wasabisys.com for Wasabi
+      bucket: hitorro-data
+      access-key: minioadmin
+      secret-key: minioadmin
+      ssl-enabled: false  # true for production, false for local MinIO
+  
+  # CLI Configuration
+  cli:
+    # Native Hitorro CLI (telnet/SSH)
+    native-enabled: true
+    telnet-port: 5050
+    ssh-port: 5022
+    
+    # Spring Shell integration
+    spring-shell-enabled: false
+    
+    # Actuator endpoint
+    actuator-enabled: true
+  
+  # Transformer Configuration - Content rendition and transformation
+  transformer:
+    enabled: true  # Enable transformer auto-configuration
+    rest:
+      enabled: true  # Enable REST API endpoints for transformations
+  
+  # Test Framework Configuration
+  test:
+    enabled: true  # Enable TestServerService
+    run-on-startup: true  # Disable automatic test execution on server startup
+
+
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.hitorro: DEBUG
+    com.hitorro.spring: INFO
+    org.hibernate: WARN

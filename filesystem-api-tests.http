@@ -1,0 +1,407 @@
+###
+### Hitorro File System API Tests
+### IntelliJ HTTP Client Format
+###
+### Usage: Run requests with Alt+Enter (or Ctrl+Enter)
+### Results will show in the Run window
+###
+
+### Set base URL
+@baseUrl = http://localhost:8080
+@filesystemApi = {{baseUrl}}/api/filesystem
+
+###############################################################################
+### 1. HEALTH CHECK & STATUS
+###############################################################################
+
+### Get File System Status
+GET {{filesystemApi}}/status
+Accept: application/json
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    
+    client.test("Local file system is available", function() {
+        var status = response.body.localFileSystem;
+        client.assert(status === "available", "Local file system not available");
+    });
+%}
+
+###############################################################################
+### 2. LOCAL FILE SYSTEM - LIST OPERATIONS
+###############################################################################
+
+### List Files in Root Directory
+GET {{filesystemApi}}/local/list?path=/
+Accept: application/json
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    
+    client.test("Response is an array", function() {
+        client.assert(Array.isArray(response.body), "Response is not an array");
+    });
+%}
+
+###
+
+### List Files in Subdirectory
+GET {{filesystemApi}}/local/list?path=/documents
+Accept: application/json
+
+###############################################################################
+### 3. LOCAL FILE SYSTEM - WRITE OPERATIONS
+###############################################################################
+
+### Write a Simple Text File
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "test/hello.txt",
+  "content": "Hello from Hitorro File System!"
+}
+
+> {%
+    client.test("File written successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    
+    client.test("Response contains success message", function() {
+        client.assert(response.body.includes("success"), "Success message not found");
+    });
+%}
+
+###
+
+### Write a JSON File
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "test/data.json",
+  "content": "{\"name\":\"test\",\"value\":123,\"active\":true}"
+}
+
+###
+
+### Write Multiple Lines
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "test/multiline.txt",
+  "content": "Line 1: First line\nLine 2: Second line\nLine 3: Third line\n\nLine 5: After blank line"
+}
+
+###
+
+### Write with Special Characters
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "test/special.txt",
+  "content": "Special chars: © ® ™ € £ ¥ ñ ü ö\nEmoji: 🎉 🚀 ✨ 🔥"
+}
+
+###############################################################################
+### 4. LOCAL FILE SYSTEM - READ OPERATIONS
+###############################################################################
+
+### Read Text File
+GET {{filesystemApi}}/local/read/test/hello.txt
+Accept: text/plain
+
+> {%
+    client.test("File read successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+    
+    client.test("Content matches expected", function() {
+        client.assert(response.body.includes("Hello from Hitorro"), "Content mismatch");
+    });
+%}
+
+###
+
+### Read JSON File
+GET {{filesystemApi}}/local/read/test/data.json
+Accept: application/json
+
+###
+
+### Read Multiline File
+GET {{filesystemApi}}/local/read/test/multiline.txt
+Accept: text/plain
+
+###
+
+### Read Non-Existent File (404)
+GET {{filesystemApi}}/local/read/nonexistent/file.txt
+Accept: text/plain
+
+> {%
+    client.test("Returns 404 for non-existent file", function() {
+        client.assert(response.status === 404, "Expected 404 status");
+    });
+%}
+
+###############################################################################
+### 5. COMPLETE WORKFLOW EXAMPLE
+###############################################################################
+
+### Step 1: Create a directory structure with file
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "documents/reports/2025/january/summary.txt",
+  "content": "Monthly Report - January 2025\n\nTotal Sales: $150,000\nNew Customers: 45\nRevenue Growth: 12%"
+}
+
+###
+
+### Step 2: Read the file back
+GET {{filesystemApi}}/local/read/documents/reports/2025/january/summary.txt
+Accept: text/plain
+
+###
+
+### Step 3: List files in the reports directory
+GET {{filesystemApi}}/local/list?path=/documents/reports/2025/january
+Accept: application/json
+
+###############################################################################
+### 6. REAL-WORLD EXAMPLES
+###############################################################################
+
+### Example: Write Configuration File
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "config/app.properties",
+  "content": "# Application Configuration\napp.name=Hitorro Example\napp.version=1.0.0\napp.debug=true\napp.log.level=INFO"
+}
+
+###
+
+### Example: Write CSV Data
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "data/users.csv",
+  "content": "id,name,email,active\n1,John Doe,john@example.com,true\n2,Jane Smith,jane@example.com,true\n3,Bob Johnson,bob@example.com,false"
+}
+
+###
+
+### Example: Read CSV Data
+GET {{filesystemApi}}/local/read/data/users.csv
+Accept: text/plain
+
+###
+
+### Example: Write Log File
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "logs/app.log",
+  "content": "[2025-01-14 19:00:00] INFO  Application started\n[2025-01-14 19:00:01] DEBUG Database connection established\n[2025-01-14 19:00:02] INFO  Ready to accept requests\n[2025-01-14 19:05:30] WARN  High memory usage detected: 85%\n[2025-01-14 19:10:00] INFO  Processed 1000 requests"
+}
+
+###
+
+### Example: Read Log File
+GET {{filesystemApi}}/local/read/logs/app.log
+Accept: text/plain
+
+###############################################################################
+### 7. ERROR HANDLING TESTS
+###############################################################################
+
+### Test: Empty Content
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "test/empty.txt",
+  "content": ""
+}
+
+###
+
+### Test: Long Path
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "very/deep/nested/directory/structure/for/testing/long/paths/file.txt",
+  "content": "This file is in a deeply nested directory"
+}
+
+###
+
+### Test: Special Characters in Filename
+POST {{filesystemApi}}/local/write
+Content-Type: application/json
+
+{
+  "path": "test/special-chars_2025-01-14_19-00-00.txt",
+  "content": "File with special characters in name"
+}
+
+###############################################################################
+### 8. SWAGGER/OPENAPI DOCUMENTATION
+###############################################################################
+
+### Get OpenAPI JSON Specification
+GET {{baseUrl}}/api-docs
+Accept: application/json
+
+###
+
+### Access Swagger UI (open in browser)
+### URL: http://localhost:8080/swagger-ui.html
+### This is an interactive documentation interface where you can:
+### - View all API endpoints
+### - See request/response schemas
+### - Try out API calls directly from the browser
+### - Download OpenAPI spec
+
+###############################################################################
+### 9. ACTUATOR ENDPOINTS
+###############################################################################
+
+### Health Check
+GET {{baseUrl}}/actuator/health
+Accept: application/json
+
+###
+
+### Application Info
+GET {{baseUrl}}/actuator/info
+Accept: application/json
+
+###
+
+### Metrics
+GET {{baseUrl}}/actuator/metrics
+Accept: application/json
+
+###############################################################################
+### NOTES
+###############################################################################
+
+# File System Base Path: ./data/files (relative to application working directory)
+#
+# To view created files:
+#   cd hitorro-example-springboot/data/files
+#   ls -la
+#
+# To clean up test files:
+#   rm -rf hitorro-example-springboot/data/files/test
+#
+# Swagger UI: http://localhost:8080/swagger-ui.html
+# OpenAPI Spec: http://localhost:8080/api-docs
+# H2 Console: http://localhost:8080/h2-console
+#
+# JAR and S3 file systems:
+#   - JAR filesystem endpoints: /api/filesystem/jar/*
+#   - S3 filesystem endpoints: /api/filesystem/s3/* (see below)
+#   - Configure in application.yml to enable
+
+###############################################################################
+### 9. S3-COMPATIBLE FILE SYSTEM (MinIO, AWS S3, Wasabi, etc.)
+###############################################################################
+###
+### Prerequisites:
+### 1. MinIO running: docker run -p 9000:9000 -p 9001:9001 ...
+### 2. Configure in application.yml:
+###    hitorro.filesystem.s3.enabled=true
+###    hitorro.filesystem.s3.endpoint=http://localhost:9000
+###    hitorro.filesystem.s3.bucket=test
+###    hitorro.filesystem.s3.access-key=minioadmin
+###    hitorro.filesystem.s3.secret-key=minioadmin
+###
+
+### List Files in S3 Root
+GET {{filesystemApi}}/s3/list?path=/
+Accept: application/json
+
+> {%
+    client.test("Request executed", function() {
+        client.assert(response.status === 200 || response.status === 503, 
+            "Expected 200 (OK) or 503 (not configured)");
+    });
+    
+    if (response.status === 200) {
+        client.test("Response is an array", function() {
+            client.assert(Array.isArray(response.body), "Response is not an array");
+        });
+    }
+%}
+
+### List Files in S3 Directory
+GET {{filesystemApi}}/s3/list?path=documents
+Accept: application/json
+
+### Read File from S3
+GET {{filesystemApi}}/s3/read/test.txt
+Accept: text/plain
+
+> {%
+    client.test("Request executed", function() {
+        client.assert(response.status === 200 || response.status === 404 || response.status === 503,
+            "Expected 200 (OK), 404 (not found), or 503 (not configured)");
+    });
+%}
+
+### Write File to S3
+POST {{filesystemApi}}/s3/write
+Content-Type: application/json
+
+{
+  "path": "test/demo.txt",
+  "content": "Hello from S3!\nThis file was created via REST API."
+}
+
+> {%
+    client.test("Request executed", function() {
+        client.assert(response.status === 200 || response.status === 503,
+            "Expected 200 (OK) or 503 (not configured)");
+    });
+%}
+
+### Write JSON File to S3
+POST {{filesystemApi}}/s3/write
+Content-Type: application/json
+
+{
+  "path": "data/config.json",
+  "content": "{\"environment\": \"development\", \"version\": \"1.0.0\"}"
+}
+
+### Read Back the JSON File
+GET {{filesystemApi}}/s3/read/data/config.json
+Accept: text/plain
+
+### Write Larger File to S3
+POST {{filesystemApi}}/s3/write
+Content-Type: application/json
+
+{
+  "path": "logs/application.log",
+  "content": "2026-01-14 INFO  Application started\n2026-01-14 INFO  Processing request\n2026-01-14 INFO  Request completed\n2026-01-14 WARN  High memory usage detected\n2026-01-14 INFO  Cache cleared"
+}
+
+###############################################################################
+### End of Tests
+###############################################################################

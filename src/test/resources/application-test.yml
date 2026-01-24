@@ -1,0 +1,98 @@
+# Test Configuration - With H2 database for DMS testing
+
+spring:
+  # H2 in-memory database for testing
+  # CASE_INSENSITIVE_IDENTIFIERS=TRUE allows case-insensitive table/column lookups
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  
+  # JPA Configuration
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create  # Use 'create' instead of 'create-drop' to keep schema during tests
+      # Use Hibernate's default naming strategy (not Spring's)
+      # This preserves the exact table names from @Table annotations
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false  # Disable SQL logging to reduce noise in tests
+    properties:
+      hibernate:
+        format_sql: false
+        use_sql_comments: false
+        # Quote all identifiers to avoid reserved keyword conflicts
+        globally_quoted_identifiers: true
+        # Continue on DDL errors (e.g., duplicate indexes)
+        hbm2ddl.halt_on_error: false
+  
+  # Spring AI Configuration for Ollama (optional - only works if Ollama is running)
+  ai:
+    ollama:
+      base-url: ${OLLAMA_URL:http://localhost:11434}
+      chat:
+        options:
+          model: llama3.2
+          temperature: 0.7
+      embedding:
+        options:
+          model: nomic-embed-text
+
+hitorro:
+  enabled: true
+  
+  # Core Hitorro paths - use environment variables or system properties if set, otherwise defaults
+  # These can be overridden via: -DHT_BIN=/path or export HT_BIN=/path
+  ht-bin: ${HT_BIN:/Users/chris/hitorro}
+  ht-home: ${HT_HOME:/Users/chris/hthome}
+  
+  services:
+    enabled: true  # Enable service context manager
+    db-init: false  # Disable db-init to avoid servlet context errors in tests
+    load:
+      - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
+      - com.hitorro.example.services.ExampleDMSService  # Load custom entities (ProductReview)
+  # Hitorro-specific properties (will be converted to JVSProperties)
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
+    # CRITICAL: dbinit property (no hyphen!) tells ServiceContext to run init with dbInit=false for tests
+    dbinit: false
+  dms:
+    enabled: true  # Enable DMS for testing
+    session-scope: prototype  # Use prototype scope for testing
+    transaction-mode: spring-managed
+    db-init:
+      enabled: false  # CSV loading handled by TestDMSConfiguration via integration events
+      # This avoids full service loading while still getting Store/DomainInfo data
+  commands:
+    rest:
+      enabled: true
+  cli:
+    native-enabled: false  # Disable CLI in tests (ports may conflict)
+    spring-shell-enabled: false
+    actuator-enabled: false
+  jvs:
+    enabled: true
+    nlp-enabled: false  # NLP requires WordNet data - requires ${HT_HOME}/data/wordnet
+    # Type definitions path - uses HT_BIN by default
+    type-definitions-path: ${HT_BIN:/Users/chris/hitorro}
+
+  # AI Service Configuration (optional - only enabled if Ollama is running)
+  ai:
+    enabled: true  # Enable AI service for testing
+    model-name: llama3.2
+
+logging:
+  level:
+    root: WARN
+    com.hitorro: DEBUG
+    com.hitorro.spring: INFO
+    com.hitorro.basedms.transformer.ai: INFO
+    org.springframework.ai: WARN
+    org.hibernate: WARN
+    org.hibernate.tool.schema: ERROR  # Suppress DDL warnings about duplicate indexes
+    org.springframework.orm: WARN

@@ -1,0 +1,67 @@
+# Maven build artifacts
+target/
+*/target/
+**/target/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Documentation
+*.md
+docs/
+generated_docs/
+
+# Test files
+src/test/
+**/src/test/
+
+# Logs
+*.log
+logs/
+derby.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database files (will be in volumes)
+data/hitorrodb*
+*.mv.db
+*.trace.db
+
+# Node modules (if any)
+node_modules/
+**/node_modules/
+
+# Build scripts
+*.sh
+scripts/
+
+# Configuration that should be mounted
+application-local.yml
+application-prod.yml

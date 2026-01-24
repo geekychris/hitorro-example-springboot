@@ -1,0 +1,4 @@
+name,storetype,rootpath,docroot,default,public,allowslinks
+default,file,file:///opt/hitorro-app/data/files,file:///opt/hitorro-app/data/files/docs,true,true,true
+blob,blob,file:///opt/hitorro-app/data/files/blob,file:///opt/hitorro-app/data/files/blob,false,true,false
+unmanaged,unmanaged,file:///opt/hitorro-app/data/files/unmanaged,file:///opt/hitorro-app/data/files/unmanaged,false,false,true

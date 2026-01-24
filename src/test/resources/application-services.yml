@@ -1,0 +1,73 @@
+# Configuration example demonstrating Hitorro service loading
+
+spring:
+  # H2 in-memory database for testing
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  
+  # JPA Configuration
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create  # Use 'create' to avoid premature schema drops
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false
+    properties:
+      hibernate:
+        globally_quoted_identifiers: true
+
+# Hitorro Configuration
+hitorro:
+  enabled: true
+  
+  # Service Configuration - Load specific services
+  services:
+    enabled: true
+    db-init: false
+    
+    # Option 1: Explicit list of services to load
+    # Can use full class names or short names
+    load:
+      - com.hitorro.base.service.BasicService
+      - com.hitorro.util.typesystem.TypeManagerService  
+      - com.hitorro.basedms.db.HibernateService
+    
+    # Option 2: HTServer pattern (commented out - use either load OR server-type)
+    # server-type: myapp  # Would load services from services.myapp in properties
+  
+  # DMS Configuration
+  dms:
+    enabled: true
+    session-scope: prototype
+    transaction-mode: spring-managed
+    
+  # Command REST endpoints
+  commands:
+    rest:
+      enabled: true
+      base-path: /api/commands
+      
+  # CLI Configuration
+  cli:
+    native-enabled: false
+    spring-shell-enabled: false
+    actuator-enabled: false
+
+# Example: HTServer-style service configuration (if using server-type above)
+# services:
+#   myapp:
+#     - com.hitorro.base.service.BasicService
+#     - com.hitorro.util.typesystem.TypeManagerService
+#     - com.hitorro.basedms.db.HibernateService
+
+logging:
+  level:
+    root: WARN
+    com.hitorro: INFO
+    com.hitorro.spring: DEBUG
+    org.hibernate: WARN

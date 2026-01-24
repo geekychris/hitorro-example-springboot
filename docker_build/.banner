@@ -1,0 +1,16 @@
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
+║              🔥 HITORRO DOCKER SCRIPTS 🔥                 ║
+║                                                            ║
+║         Build and Run in ONE Command!                      ║
+║                                                            ║
+║         ./build-and-start.sh                               ║
+║                                                            ║
+║         Or use the master script:                          ║
+║         ./hitorro.sh [command]                             ║
+║                                                            ║
+║         Quick Start: Read QUICK_START.md                   ║
+║         Full Docs:   Read README.md                        ║
+║         Help:        ./hitorro.sh help                     ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝

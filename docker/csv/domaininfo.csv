@@ -1,0 +1,4 @@
+domain,displayname,description,valuemapimpl
+status,Document Status,Status values for documents,com.hitorro.basedms.CategoryStringValueMap
+priority,Priority Level,Priority levels,com.hitorro.basedms.CategoryStringValueMap
+category,Document Category,Document categories,com.hitorro.basedms.CategoryStringValueMap

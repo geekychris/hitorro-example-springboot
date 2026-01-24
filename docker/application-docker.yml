@@ -1,0 +1,160 @@
+# Docker-specific configuration for Hitorro Example Application
+
+server:
+  port: 8080
+  # Tomcat Configuration
+  tomcat:
+    max-swallow-size: 500MB
+    max-http-form-post-size: 500MB
+
+spring:
+  application:
+    name: hitorro-example-docker
+  
+  # Multipart File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 500MB
+      max-request-size: 500MB
+      file-size-threshold: 2KB
+  
+  # Database - H2 file-based (persisted in volume)
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:/var/lib/hitorro/data/hitorrodb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    driver-class-name: org.h2.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:hitorro}
+  
+  # H2 Console
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        trace: false
+        web-allow-others: true  # Allow access from outside container
+  
+  # JPA/Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        globally_quoted_identifiers: true
+        format_sql: true
+
+# Swagger/OpenAPI
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: true
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,hitorro-commands
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  health:
+    diskspace:
+      enabled: true
+      threshold: 1GB
+
+# Hitorro Configuration
+hitorro:
+  enabled: true
+  application-name: HitorroDockerExample
+  
+  # Paths
+  ht-bin: ${HT_BIN:/opt/hitorro}
+  ht-home: ${HT_HOME:/var/lib/hitorro}
+  
+  # Services
+  services:
+    enabled: true
+    db-init: true
+    load:
+      - com.hitorro.basedms.db.HibernateService
+      - com.hitorro.base.objects.BaseDMSService
+      - com.hitorro.basedms.transformer.TransformerService
+  
+  # Hitorro Properties
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
+    dbinit: true
+  
+  # DMS Configuration
+  dms:
+    enabled: true
+    session-scope: request
+    transaction-mode: spring-managed
+    db-init:
+      enabled: false
+  
+  # JVS Configuration
+  jvs:
+    enabled: true
+    nlp-enabled: false
+  
+  # REST Configuration
+  rest:
+    enabled: true
+    base-path: /api/rest
+    expose-internal: false
+  
+  # Command REST
+  commands:
+    rest:
+      enabled: true
+      base-path: /api/commands
+  
+  # CLI Configuration
+  cli:
+    native-enabled: true
+    telnet-port: 9000
+    ssh-port: 9022
+    spring-shell-enabled: false
+    actuator-enabled: true
+  
+  # Transformer Configuration
+  transformer:
+    enabled: true
+    rest:
+      enabled: true
+  
+  # File System Configuration
+  filesystem:
+    local:
+      enabled: true
+      base-path: /opt/hitorro-app/data/files
+
+# Logging
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    com.hitorro: ${LOGGING_LEVEL_COM_HITORRO:DEBUG}
+    com.hitorro.spring: INFO
+    org.hibernate: WARN
+    org.springframework: INFO
+  file:
+    name: /var/lib/hitorro/logs/hitorro-app.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

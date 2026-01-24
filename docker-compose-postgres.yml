@@ -1,0 +1,95 @@
+version: '3.8'
+
+# Alternative docker-compose configuration using PostgreSQL instead of H2
+# Usage: docker-compose -f docker-compose-postgres.yml up
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hitorro-postgres
+    environment:
+      - POSTGRES_DB=hitorrodb
+      - POSTGRES_USER=hitorro
+      - POSTGRES_PASSWORD=hitorro_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - hitorro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hitorro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hitorro-app:
+    build:
+      context: ..
+      dockerfile: hitorro-example-springboot/Dockerfile
+    image: hitorro-example-springboot:latest
+    container_name: hitorro-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+      - "9022:9022"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker-postgres
+      - HT_BIN=/opt/hitorro
+      - HT_HOME=/var/lib/hitorro
+      
+      # PostgreSQL Configuration
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/hitorrodb
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - SPRING_DATASOURCE_USERNAME=hitorro
+      - SPRING_DATASOURCE_PASSWORD=hitorro_password
+      
+      # JPA Configuration
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=false
+      
+      # Logging
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_COM_HITORRO=DEBUG
+      
+      # JVM Options
+      - JAVA_OPTS=-Xmx2g -Xms512m -XX:+UseG1GC
+    volumes:
+      - ./docker/config:/var/lib/hitorro/config:ro
+      - hitorro-files:/opt/hitorro-app/data/files
+      - hitorro-logs:/var/lib/hitorro/logs
+    networks:
+      - hitorro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  postgres-data:
+    driver: local
+  hitorro-files:
+    driver: local
+  hitorro-logs:
+    driver: local
+
+networks:
+  hitorro-network:
+    driver: bridge

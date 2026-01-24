@@ -1,0 +1,126 @@
+# Multi-stage Docker build for Hitorro Example Spring Boot Application with React UI
+# Stage 1: Build React Frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+# Copy frontend package files
+COPY hitorro-example-springboot/frontend/package*.json ./
+
+# Install dependencies (use npm install instead of ci for flexibility)
+RUN npm install
+
+# Copy frontend source
+COPY hitorro-example-springboot/frontend/ ./
+
+# Build React app
+RUN npm run build
+
+# Stage 2: Build the Spring Boot application with Maven
+FROM maven:3.9-eclipse-temurin-21 AS backend-builder
+
+# Set working directory
+WORKDIR /build
+
+# COMPLETE BUILD: Copy ALL modules and build everything
+
+# Copy parent POM
+COPY pom.xml /build/pom.xml
+
+# Copy ALL hitorro modules (all that exist)
+COPY hitorro-util /build/hitorro-util
+COPY hitorro-test /build/hitorro-test
+COPY hitorro-features /build/hitorro-features
+COPY hitorro-base /build/hitorro-base
+COPY hitorro-basedms /build/hitorro-basedms
+COPY hitorro-baseui /build/hitorro-baseui
+COPY hitorro-app /build/hitorro-app
+COPY hitorro-jsonsql /build/hitorro-jsonsql
+COPY hitorro-logdigest /build/hitorro-logdigest
+COPY hitorro-conversation /build/hitorro-conversation
+COPY hitorro-text-core /build/hitorro-text-core
+COPY hitorro-text-persistence /build/hitorro-text-persistence
+COPY hitorro-analysis /build/hitorro-analysis
+COPY hitorro-unittime /build/hitorro-unittime
+COPY hitorro-objretrieval /build/hitorro-objretrieval
+COPY hitorro-dedupe /build/hitorro-dedupe
+COPY hitorro-dataaquisition /build/hitorro-dataaquisition
+COPY hitorro-spring-boot /build/hitorro-spring-boot
+
+# Copy example app source
+COPY hitorro-example-springboot/src /build/hitorro-example-springboot/src
+COPY hitorro-example-springboot/pom.xml /build/hitorro-example-springboot/pom.xml
+
+# Copy the React build output to Spring Boot static resources
+COPY --from=frontend-builder /frontend/dist /build/hitorro-example-springboot/src/main/resources/static
+
+# Build ALL modules from parent POM (this builds everything except Spring Boot modules which aren't in parent POM)
+WORKDIR /build
+RUN mvn clean install -Dmaven.test.skip=true -B
+
+# Build Spring Boot modules separately (they have their own parent POM)
+WORKDIR /build/hitorro-spring-boot
+RUN mvn clean install -Dmaven.test.skip=true -B
+
+# Build the example application
+WORKDIR /build/hitorro-example-springboot
+RUN mvn clean package -Dmaven.test.skip=true -B
+
+# Stage 3: Create the runtime image
+FROM eclipse-temurin:21-jre-alpine
+
+# Install required system packages
+RUN apk add --no-cache \
+    ttf-dejavu \
+    fontconfig \
+    libreoffice \
+    curl \
+    bash
+
+# Create application user
+RUN addgroup -S hitorro && adduser -S hitorro -G hitorro
+
+# Set up application directories
+ENV HT_BIN=/opt/hitorro \
+    HT_HOME=/var/lib/hitorro \
+    APP_HOME=/opt/hitorro-app
+
+RUN mkdir -p ${HT_BIN} ${HT_HOME} ${APP_HOME} && \
+    mkdir -p ${HT_HOME}/config/csv \
+    ${HT_HOME}/data \
+    ${HT_HOME}/logs \
+    ${APP_HOME}/data/files && \
+    chown -R hitorro:hitorro ${HT_BIN} ${HT_HOME} ${APP_HOME}
+
+# Copy CSV configuration files (these are required)
+COPY --chown=hitorro:hitorro hitorro-example-springboot/docker/csv/*.csv ${HT_HOME}/config/csv/
+
+# Copy the built application from builder stage (includes React build)
+COPY --from=backend-builder --chown=hitorro:hitorro /build/hitorro-example-springboot/target/*.jar ${APP_HOME}/app.jar
+
+# Switch to application user
+USER hitorro
+
+# Set working directory
+WORKDIR ${APP_HOME}
+
+# Expose application port
+EXPOSE 8080
+
+# Expose CLI ports (Telnet and SSH)
+EXPOSE 9000 9022
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+# JVM Options
+ENV JAVA_OPTS="-Xmx2g -Xms512m \
+    -XX:+UseG1GC \
+    -XX:MaxGCPauseMillis=200 \
+    -XX:+HeapDumpOnOutOfMemoryError \
+    -XX:HeapDumpPath=${HT_HOME}/logs \
+    -Djava.security.egd=file:/dev/./urandom"
+
+# Run the application
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar ${APP_HOME}/app.jar"]

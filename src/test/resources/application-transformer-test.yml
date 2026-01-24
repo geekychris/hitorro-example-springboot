@@ -1,0 +1,69 @@
+# Configuration for Transformer REST Integration Test
+# This profile enables full initialization to test the actual transformation pipeline
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:transformer_testdb;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        globally_quoted_identifiers: true
+        hbm2ddl.halt_on_error: false
+
+hitorro:
+  enabled: true
+  ht-bin: ${HT_BIN:/Users/chris/hitorro}
+  ht-home: ${HT_HOME:/Users/chris/hthome}
+  
+  services:
+    enabled: true
+    db-init: true  # Enable db-init to load stores and other base data
+    load:
+      - com.hitorro.base.objects.BaseDMSService
+      - com.hitorro.basedms.transformer.TransformerService  # Load TransformerService!
+      - com.hitorro.example.services.ExampleDMSService
+  
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
+    dbinit: true  # Enable full initialization
+    
+  dms:
+    enabled: true
+    session-scope: prototype
+    transaction-mode: spring-managed
+    db-init:
+      enabled: true  # Enable CSV loading for stores, etc.
+      
+  commands:
+    rest:
+      enabled: true
+      
+  cli:
+    native-enabled: false
+    spring-shell-enabled: false
+    actuator-enabled: false
+    
+  jvs:
+    enabled: true
+    nlp-enabled: false
+    type-definitions-path: ${HT_BIN:/Users/chris/hitorro}
+
+logging:
+  level:
+    root: WARN
+    com.hitorro: INFO
+    org.hibernate: WARN
+    org.springframework.orm: WARN

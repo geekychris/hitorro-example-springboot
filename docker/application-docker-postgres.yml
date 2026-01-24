@@ -1,0 +1,148 @@
+# Docker PostgreSQL-specific configuration for Hitorro Example Application
+
+server:
+  port: 8080
+  tomcat:
+    max-swallow-size: 500MB
+    max-http-form-post-size: 500MB
+
+spring:
+  application:
+    name: hitorro-example-docker-postgres
+  
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 500MB
+      max-request-size: 500MB
+      file-size-threshold: 2KB
+  
+  # PostgreSQL Database
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/hitorrodb}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:hitorro}
+    password: ${SPRING_DATASOURCE_PASSWORD:hitorro_password}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # JPA/Hibernate for PostgreSQL
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        globally_quoted_identifiers: true
+        format_sql: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+# Swagger/OpenAPI
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: true
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,hitorro-commands
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  health:
+    diskspace:
+      enabled: true
+      threshold: 1GB
+
+# Hitorro Configuration (same as docker profile)
+hitorro:
+  enabled: true
+  application-name: HitorroDockerPostgres
+  ht-bin: ${HT_BIN:/opt/hitorro}
+  ht-home: ${HT_HOME:/var/lib/hitorro}
+  
+  services:
+    enabled: true
+    db-init: true
+    load:
+      - com.hitorro.basedms.db.HibernateService
+      - com.hitorro.base.objects.BaseDMSService
+      - com.hitorro.basedms.transformer.TransformerService
+  
+  hitorro-properties:
+    network.disablelocalhostcheck: true
+    rpc.enableclustermember: false
+    dbinit: true
+  
+  dms:
+    enabled: true
+    session-scope: request
+    transaction-mode: spring-managed
+    db-init:
+      enabled: false
+  
+  jvs:
+    enabled: true
+    nlp-enabled: false
+  
+  rest:
+    enabled: true
+    base-path: /api/rest
+    expose-internal: false
+  
+  commands:
+    rest:
+      enabled: true
+      base-path: /api/commands
+  
+  cli:
+    native-enabled: true
+    telnet-port: 9000
+    ssh-port: 9022
+    spring-shell-enabled: false
+    actuator-enabled: true
+  
+  transformer:
+    enabled: true
+    rest:
+      enabled: true
+  
+  filesystem:
+    local:
+      enabled: true
+      base-path: /opt/hitorro-app/data/files
+
+# Logging
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    com.hitorro: ${LOGGING_LEVEL_COM_HITORRO:DEBUG}
+    org.hibernate: WARN
+    org.springframework: INFO
+  file:
+    name: /var/lib/hitorro/logs/hitorro-app.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

@@ -1,0 +1,45 @@
+{
+  "name": "article",
+  "description": "Article document type with title, body, and metadata",
+  "fields": {
+    "id": {
+      "type": "id",
+      "required": true,
+      "description": "Unique document identifier"
+    },
+    "title": {
+      "type": "mls",
+      "required": true,
+      "description": "Multi-language title"
+    },
+    "body": {
+      "type": "mls",
+      "description": "Multi-language article body"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "publishDate": {
+          "type": "date"
+        },
+        "tags": {
+          "type": "stringarray"
+        }
+      }
+    },
+    "dates": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "date"
+        },
+        "modified": {
+          "type": "date"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "user_profile",
+  "description": "User profile document type",
+  "fields": {
+    "id": {
+      "type": "id",
+      "required": true,
+      "description": "User identifier"
+    },
+    "title": {
+      "type": "mls",
+      "required": true,
+      "description": "Display name"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "required": true
+        },
+        "age": {
+          "type": "integer"
+        },
+        "interests": {
+          "type": "stringarray"
+        }
+      }
+    },
+    "times": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "date"
+        },
+        "modified": {
+          "type": "date"
+        }
+      }
+    }
+  }
+}
