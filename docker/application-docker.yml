@@ -93,11 +93,15 @@ hitorro:
       - com.hitorro.basedms.db.HibernateService
       - com.hitorro.base.objects.BaseDMSService
       - com.hitorro.basedms.transformer.TransformerService
+    # Exclude ClusterService to avoid initialization errors in Docker
+    exclude:
+      - com.hitorro.network.rpc.cluster.ClusterService
   
   # Hitorro Properties
   hitorro-properties:
     network.disablelocalhostcheck: true
     rpc.enableclustermember: false
+    cluster.enabled: false
     dbinit: true
   
   # DMS Configuration
