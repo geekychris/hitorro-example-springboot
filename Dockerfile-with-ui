@@ -92,7 +92,13 @@ RUN mkdir -p ${HT_BIN} ${HT_HOME} ${APP_HOME} && \
     ${APP_HOME}/data/files && \
     chown -R hitorro:hitorro ${HT_BIN} ${HT_HOME} ${APP_HOME}
 
-# Copy CSV configuration files (these are required)
+# Copy configuration files from hitorro-all root (essential configs)
+COPY --chown=hitorro:hitorro config/ ${HT_HOME}/config/
+
+# Copy data files from hitorro-all root (WordNet, classifiers, NLP data, etc.)
+COPY --chown=hitorro:hitorro data/ ${HT_HOME}/data/
+
+# Copy CSV configuration files (these override defaults if present)
 COPY --chown=hitorro:hitorro hitorro-example-springboot/docker/csv/*.csv ${HT_HOME}/config/csv/
 
 # Copy the built application from builder stage (includes React build)
