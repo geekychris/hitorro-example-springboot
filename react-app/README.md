@@ -30,6 +30,24 @@ A comprehensive React testing interface for the Hitorro Spring Boot Example appl
 - **Type Conversion**: Automatic parameter type handling
 - **Result Visualization**: View execution results in formatted JSON
 
+### 🚀 REST API Explorer
+- **Endpoint Discovery**: Automatically discover all REST endpoints
+- **Interactive Testing**: Test REST APIs with custom parameters
+- **Streaming Support**: Real-time streaming endpoint testing
+- **Response Visualization**: View API responses in formatted JSON
+
+### 🔧 Services Explorer
+- **Service Discovery**: View all loaded Hitorro services
+- **Dependency Hierarchy**: Visualize service dependencies
+- **Service Information**: View service details and status
+
+### 📊 Structured Logging
+- **Event Logging**: Log user activity events (login, logout, API access)
+- **Kafka Integration**: Publish logs to Kafka topics
+- **Real-time Demo**: Interactive demo with user-configurable parameters
+- **Schema Visualization**: View log schema and configuration
+- **Status Checking**: Verify structured logging is enabled and configured
+
 ## Prerequisites
 
 - Node.js 18+ and npm
@@ -80,9 +98,13 @@ react-app/
 ├── src/
 │   ├── pages/           # Page components
 │   │   ├── DMSPage.tsx
+│   │   ├── DMSPageEnhanced.tsx
 │   │   ├── CrawlerPage.tsx
 │   │   ├── TypeSystemPage.tsx
-│   │   └── CommandsPage.tsx
+│   │   ├── CommandsPage.tsx
+│   │   ├── RestExplorerPage.tsx
+│   │   ├── ServicesExplorerPage.tsx
+│   │   └── StructuredLoggingPage.tsx
 │   ├── services/        # API services
 │   │   └── api.ts
 │   ├── types/           # TypeScript types
@@ -125,6 +147,19 @@ The application communicates with the following backend endpoints:
 - `GET /list` - List all commands
 - `GET /{name}` - Get command details
 - `POST /execute` - Execute command
+
+### REST Explorer API (`/api/rest`)
+- `GET /endpoints` - List all REST endpoints
+
+### Services API (`/api/services`)
+- `GET /list` - List all services
+- `GET /graph` - Get service dependency graph
+
+### Structured Logging API (`/api/demo`)
+- `GET /info` - Get logging configuration info
+- `POST /login` - Log user login event
+- `POST /logout` - Log user logout event
+- `GET /data` - Log API access event
 
 ## Technology Stack
 

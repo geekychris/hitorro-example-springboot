@@ -7,6 +7,7 @@ import TypeSystemPage from './pages/TypeSystemPage';
 import CommandsPage from './pages/CommandsPage';
 import RestExplorerPage from './pages/RestExplorerPage';
 import ServicesExplorerPage from './pages/ServicesExplorerPage';
+import StructuredLoggingPage from './pages/StructuredLoggingPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,7 +18,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services';
+type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services' | 'logging';
 
 interface Tab {
   id: TabId;
@@ -32,6 +33,7 @@ const tabs: Tab[] = [
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },
   { id: 'rest', label: 'REST API Explorer', description: 'Discover and test REST endpoints with streaming support' },
   { id: 'services', label: 'Services', description: 'Explore Hitorro services and dependency hierarchy' },
+  { id: 'logging', label: 'Structured Logging', description: 'Config-driven structured logging with Kafka integration' },
 ];
 
 function App() {
@@ -51,6 +53,8 @@ function App() {
         return <RestExplorerPage />;
       case 'services':
         return <ServicesExplorerPage />;
+      case 'logging':
+        return <StructuredLoggingPage />;
       default:
         return <div>Select a tab</div>;
     }

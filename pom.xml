@@ -205,6 +205,12 @@
             <version>1.0.0-M4</version>
         </dependency>
 
+        <!-- Kafka - for Structured Logging (optional, only if structured logging is enabled) -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

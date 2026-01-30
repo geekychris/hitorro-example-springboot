@@ -152,4 +152,19 @@ export const commandApi = {
     api.post<CommandExecuteResponse>('/commands/execute', request),
 };
 
+// Structured Logging API - Config-driven structured logging with Kafka integration
+export const structuredLoggingApi = {
+  getInfo: () =>
+    api.get('/demo/info'),
+  
+  logLogin: (userId: string, username: string) =>
+    api.post('/demo/login', { userId, username }),
+  
+  logLogout: (userId: string, username: string, sessionId: string) =>
+    api.post('/demo/logout', { userId, username, sessionId }),
+  
+  logApiAccess: (userId: string) =>
+    api.get('/demo/data', { params: { userId } }),
+};
+
 export default api;

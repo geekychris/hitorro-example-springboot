@@ -1,264 +1,245 @@
 # Hitorro Spring Boot Example Application
 
-This is an example Spring Boot application demonstrating how to use the Hitorro framework within a Spring Boot application using the `hitorro-spring-boot-starter`.
+A comprehensive example application demonstrating the integration of Hitorro framework with Spring Boot, including an interactive React UI for testing all features.
 
-## Features Demonstrated
+## Features
 
-- ✅ Automatic Hitorro service initialization
-- ✅ Accessing Hitorro services via dependency injection
-- ✅ DMS operations with versioning support
-- ✅ JSON Type System with NLP features
-- ✅ REST endpoints for documents and queries
-- ✅ **Native CLI (telnet/SSH)** - Interactive command line interface
-- ✅ Command execution via HTTP (`/api/commands/execute`)
-- ✅ **H2 Database with persistent file storage**
-- ✅ **H2 Console web UI** for database management
-- ✅ Spring Boot Actuator integration
+This example showcases:
 
-## Prerequisites
+- **Document Management System (DMS)** - Full CRUD operations, versioning, content management
+- **Filesystem Crawler** - Import files/directories into DMS
+- **JSON Type System (JVS)** - Type enrichment and field exploration with NLP features
+- **Command Framework** - Execute `@CommandDef` annotated methods via REST and CLI
+- **REST API** - Auto-generated REST endpoints for all services
+- **Service Framework** - Hitorro service lifecycle and dependency management
+- **Structured Logging** - Config-driven structured logging with Kafka integration (NEW!)
+- **Interactive React UI** - Test all features through a modern web interface
+
+## Quick Start
+
+### Prerequisites
 
 - Java 21+
 - Maven 3.8+
-- Hitorro 3.0.0 installed in local Maven repository
-- hitorro-spring-boot-starter 1.0.0 installed
+- Node.js 18+ (for React UI)
+- Kafka (optional, for structured logging)
 
-## Dependencies
+### Running the Application
 
-This example includes:
-- `hitorro-spring-boot-starter` - Core Spring Boot integration
-- `hitorro-basedms` - Document management system
-- `hitorro-text-core` - Text processing & NLP (required for JSON type definitions)
+1. **Start the Spring Boot application**:
+   ```bash
+   cd hitorro-example-springboot
+   mvn spring-boot:run
+   ```
 
-> **Note**: If you see `ClassNotFoundException` for classes like `POSTokenizer`, ensure `hitorro-text-core` is in your dependencies. See [DEPENDENCIES.md](DEPENDENCIES.md) for details.
+2. **Access the application**:
+   - **React UI**: http://localhost:8080 (served by Spring Boot)
+   - **H2 Console**: http://localhost:8080/h2-console
+   - **Swagger UI**: http://localhost:8080/swagger-ui.html
+   - **Actuator**: http://localhost:8080/actuator
 
-## 🚀 IntelliJ IDEA Quick Start
+3. **Access the CLI** (optional):
+   ```bash
+   telnet localhost 5050
+   ```
 
-**Want to debug right away?** See **[QUICK_START_INTELLIJ.md](QUICK_START_INTELLIJ.md)**
+## React UI Features
 
-1. Open project in IntelliJ
-2. Select **"HitorroExampleSpringBoot"** from run configurations dropdown
-3. Click Debug button (🐛) or press `Shift+F9`
+The React UI provides interactive tabs for testing all features:
 
-That's it! The configuration is pre-configured with all required VM options.
+### 📄 Document Management
+- Create, read, update, delete documents
+- Upload and download content with multiple renditions
+- Create versions and view history
+- Organize with containers (folders, forums)
+- Tag with categories for advanced search
+- Transform content (PDF to text, images to thumbnails)
 
-## Building the Application
+### 📁 Filesystem Crawler
+- Import files from server filesystem into DMS
+- Recursive directory crawling
+- Real-time progress tracking
+- Support for various file types
 
-```bash
-# From the hitorro-example-springboot directory
-mvn clean package
+### 🔧 Type System
+- JSON enrichment with JVS2JVSEnrichMapper
+- Browse available type definitions
+- Explore fields with types and paths
+- Interactive JSON viewer
 
-# Or from the hitorro-all root
-cd hitorro-all
-mvn clean install -pl hitorro-example-springboot -am
-```
+### 💻 Commands
+- Discover all @CommandDef methods
+- Dynamic parameter forms
+- Execute commands with results visualization
+- Support for complex parameter types
 
-## Running the Application
+### 🚀 REST Explorer
+- Auto-discover all REST endpoints
+- Test APIs interactively
+- Streaming endpoint support
+- View formatted responses
 
-### ⭐ Recommended: Use application.yml (Simplest)
+### 🔧 Services Explorer
+- View all loaded Hitorro services
+- Visualize service dependency hierarchy
+- Inspect service details and status
 
-The **easiest way** - just configure once in `application.yml`:
+### 📊 Structured Logging (NEW!)
+- Log user activity events (login, logout, API access)
+- Publish to Kafka topics for downstream processing
+- Real-time demo with configurable parameters
+- View log schema and Kafka configuration
+- Check logging status and connectivity
 
-```yaml
-hitorro:
-  ht-bin: /Users/chris/hitorro      # Your Hitorro installation
-  ht-home: /Users/chris/hthome      # Your Hitorro home directory
-```
+## Structured Logging Setup
 
-Then run normally - no JVM arguments needed:
+The application includes structured logging support with Kafka integration:
 
-```bash
-# With Maven
-mvn spring-boot:run
+### Enable Structured Logging
 
-# With JAR
-java -jar target/hitorro-example-springboot-1.0.0.jar
-```
+1. **Start Kafka** (Docker):
+   ```bash
+   docker run -d --name zookeeper -p 2181:2181 \
+     confluentinc/cp-zookeeper:latest \
+     -e ZOOKEEPER_CLIENT_PORT=2181
+   
+   docker run -d --name kafka -p 9092:9092 \
+     --link zookeeper \
+     -e KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181 \
+     -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
+     -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+     confluentinc/cp-kafka:latest
+   ```
 
-The application will start on `http://localhost:8080`
+2. **Enable in application.yml**:
+   ```yaml
+   hitorro:
+     structured-logging:
+       enabled: true
+       kafka-bootstrap-servers: localhost:9092
+   ```
 
-> **✅ Best Practice**: Configure `hitorro.ht-bin` and `hitorro.ht-home` in `application.yml`. The framework automatically converts these to system properties. See [CONFIGURATION_UPDATED.md](CONFIGURATION_UPDATED.md) for details.
+3. **Restart the application**
 
-### Alternative Methods
+4. **Use the Structured Logging tab** in the React UI to:
+   - Check logging status
+   - Log user activity events
+   - View responses in real-time
 
-<details>
-<summary>Click to see other configuration methods</summary>
-
-#### Option 1: Run Script
-```bash
-./run.sh
-```
-
-#### Option 2: Environment Variables
-```bash
-export HT_BIN=/Users/chris/hitorro
-export HT_HOME=/Users/chris/hthome
-mvn spring-boot:run
-```
-
-#### Option 3: System Properties  
-```bash
-mvn spring-boot:run \
-  -Dspring-boot.run.jvmArguments="-DHT_BIN=/Users/chris/hitorro -DHT_HOME=/Users/chris/hthome"
-```
-
-All methods work, but **application.yml is recommended** for simplicity.
-
-</details>
-
-## Available Endpoints
-
-### Example Application Endpoints
-
-#### Get Application Status
-```bash
-curl http://localhost:8080/api/example/status
-```
-
-Returns information about the application and initialized Hitorro services.
-
-#### Get BasicService Information
-```bash
-curl http://localhost:8080/api/example/basic-service
-```
-
-Shows whether BasicService is available and initialized.
-
-#### List All Hitorro Services
-```bash
-curl http://localhost:8080/api/example/services
-```
-
-Lists all initialized Hitorro services with their details.
-
-#### Health Check
-```bash
-curl http://localhost:8080/api/example/health
-```
-
-Simple health check endpoint.
-
-### Hitorro Command Endpoints
-
-#### Execute a Command
-```bash
-curl -X POST http://localhost:8080/api/commands/execute \
-  -H "Content-Type: application/json" \
-  -d '{"command": "help"}'
-```
-
-#### List Available Commands
-```bash
-curl http://localhost:8080/api/commands/list
-```
-
-### Native CLI (Telnet/SSH)
-
-**Quick Start**: See **[CLI_QUICK_START.md](CLI_QUICK_START.md)**
+### Verify Logs in Kafka
 
 ```bash
-# Connect via telnet
-telnet localhost 5050
-
-# Connect via SSH
-ssh -p 5022 user@localhost
-# Password: user
+# View logs
+docker exec kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic user-events \
+  --from-beginning
 ```
 
-Try commands:
-```
-HitorroExample> help
-HitorroExample> quit          # Exit CLI session
-HitorroExample> uptime        # Application uptime
-HitorroExample> memory        # Memory usage
-HitorroExample> threads       # Thread info
-HitorroExample> env.time      # Current time
-```
+### Log Schema
 
-**Note**: All `@CommandDef` annotated methods are automatically discovered and registered! See [COMMANDDEF_ANNOTATION_SUPPORT.md](../COMMANDDEF_ANNOTATION_SUPPORT.md) for details.
+Logs are defined in `src/main/resources/log-configs/user-activity-log.json` and include:
+- User ID and username
+- Event type (LOGIN, LOGOUT, API_ACCESS)
+- Timestamp and date
+- IP address and user agent
+- HTTP method, endpoint, status code
+- Response time
+- Custom metadata
 
-### Spring Boot Actuator Endpoints
-
-```bash
-# Health
-curl http://localhost:8080/actuator/health
-
-# Info
-curl http://localhost:8080/actuator/info
-
-# All endpoints
-curl http://localhost:8080/actuator
-```
-
-## H2 Database Console
-
-The application includes **H2 Console** - a web-based database management tool.
-
-### Quick Access
-
-1. **Start the application**: `mvn spring-boot:run`
-2. **Open H2 Console**: `http://localhost:8080/h2-console`
-3. **Login**:
-   - JDBC URL: `jdbc:h2:file:./data/hitorrodb`
-   - Username: `sa`
-   - Password: `hitorro`
-
-### Features
-
-- ✅ **Persistent file database** - Data survives restarts
-- ✅ **SQL query execution** - Run queries directly in browser
-- ✅ **Table browser** - Explore schema and data
-- ✅ **Export/Import** - CSV and SQL script support
-- ✅ **Visual query builder** - Click-based query construction
-
-**📖 Complete Guide**: See **[H2_DATABASE_GUIDE.md](H2_DATABASE_GUIDE.md)** for:
-- Detailed H2 Console usage
-- Common SQL queries for Hitorro DMS
-- Backup/restore procedures
-- Troubleshooting tips
-- IntelliJ Database integration
-
-### Database Location
-
-**Files**: `./data/hitorrodb.mv.db`
-
-The database persists between application restarts. To reset:
-```bash
-rm ./data/hitorrodb.mv.db
-```
-
-## CLI Access
-
-### Telnet CLI
-```bash
-telnet localhost 5050
-```
-
-### SSH CLI
-```bash
-ssh -p 5022 user@localhost
-```
-
-Both provide access to Hitorro's native command-line interface.
+See [STRUCTURED_LOGGING_DEMO.md](STRUCTURED_LOGGING_DEMO.md) for complete documentation.
 
 ## Configuration
 
-Edit `src/main/resources/application.yml` to customize:
+### Database
 
-- Server port
-- Hitorro services configuration
-- H2 database settings (persistent file storage)
-- CLI ports
-- DMS settings
-- Logging levels
+The application uses H2 database by default (file-based, persistent):
 
-### Important Configuration Notes
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/hitorrodb
+    username: sa
+    password: hitorro
+```
 
-**DMS Store Configuration**: By default, Store CSV loading is disabled to avoid initialization errors. Stores are DMS content storage locations that require file system paths. See **[STORE_CONFIGURATION.md](STORE_CONFIGURATION.md)** if you need to:
-- Store document content (PDFs, images, etc.)
-- Configure content stores with file system paths
-- Enable Store CSV initialization
+Access H2 Console at http://localhost:8080/h2-console
 
-**H2 Database**: The application uses persistent file-based H2 database. See **[H2_DATABASE_GUIDE.md](H2_DATABASE_GUIDE.md)** for complete database management documentation.
+### Hitorro Configuration
+
+Core Hitorro settings in `application.yml`:
+
+```yaml
+hitorro:
+  enabled: true
+  ht-bin: /Users/chris/hitorro      # Hitorro installation
+  ht-home: /Users/chris/hthome      # Runtime data
+  
+  services:
+    enabled: true
+    load:
+      - com.hitorro.basedms.db.HibernateService
+      - com.hitorro.base.objects.BaseDMSService
+      - com.hitorro.basedms.transformer.TransformerService
+  
+  dms:
+    enabled: true
+  
+  jvs:
+    enabled: true
+    nlp-enabled: false
+  
+  cli:
+    native-enabled: true
+    telnet-port: 5050
+```
+
+## API Documentation
+
+### Swagger UI
+
+Interactive API documentation available at:
+- http://localhost:8080/swagger-ui.html
+
+### Key Endpoints
+
+- **DMS**: `/api/dms/documents`, `/api/dms/containers`
+- **Crawler**: `/api/dms/crawler/crawl`
+- **Type System**: `/api/jvs/enrich`, `/api/jvs/types`
+- **Commands**: `/api/commands/list`, `/api/commands/execute`
+- **REST Explorer**: `/api/rest/endpoints`
+- **Services**: `/api/services/list`
+- **Structured Logging**: `/api/demo/login`, `/api/demo/logout`, `/api/demo/data`
+
+## Development
+
+### Building the Application
+
+```bash
+mvn clean package
+```
+
+### Building the React UI
+
+```bash
+cd react-app
+npm install
+npm run build
+```
+
+The built React app is automatically served by Spring Boot.
+
+### Running Tests
+
+```bash
+mvn test
+```
+
+## Documentation
+
+- **[STRUCTURED_LOGGING_DEMO.md](STRUCTURED_LOGGING_DEMO.md)** - Structured logging guide
+- **[react-app/README.md](react-app/README.md)** - React UI documentation
+- **[generated_docs/](generated_docs/)** - Additional documentation
 
 ## Project Structure
 
@@ -266,227 +247,43 @@ Edit `src/main/resources/application.yml` to customize:
 hitorro-example-springboot/
 ├── src/
 │   ├── main/
-│   │   ├── java/com/hitorro/example/
-│   │   │   ├── HitorroExampleApplication.java    # Main application class
-│   │   │   └── controller/
-│   │   │       └── ExampleController.java        # Example REST controller
+│   │   ├── java/
+│   │   │   └── com/hitorro/example/
+│   │   │       ├── HitorroExampleApplication.java
+│   │   │       └── logging/              # Structured logging
 │   │   └── resources/
-│   │       └── application.yml                   # Configuration
+│   │       ├── application.yml
+│   │       └── log-configs/              # Log schema definitions
 │   └── test/
-│       └── java/com/hitorro/example/             # Tests
-├── pom.xml                                       # Maven configuration
-└── README.md                                     # This file
-```
-
-## How It Works
-
-### 1. Spring Boot Auto-Configuration
-
-The `hitorro-spring-boot-starter` automatically:
-- Initializes Hitorro's `ServiceContext`
-- Registers all Hitorro services as Spring beans
-- Sets up command endpoints
-- Configures CLI access
-- Bridges property systems
-
-### 2. Accessing Hitorro Services
-
-Inject `HitorroServiceFactory` to access Hitorro services:
-
-```java
-@RestController
-public class MyController {
-    
-    @Autowired
-    private HitorroServiceFactory serviceFactory;
-    
-    @GetMapping("/my-endpoint")
-    public ResponseEntity<?> myEndpoint() {
-        // Get a Hitorro service
-        BasicService service = serviceFactory.getService(BasicService.class);
-        
-        // Use the service
-        // ...
-        
-        return ResponseEntity.ok("Success");
-    }
-}
-```
-
-### 3. Using ServiceContext Directly
-
-You can also inject `ServiceContext` directly:
-
-```java
-@Service
-public class MyService {
-    
-    @Autowired
-    private ServiceContext serviceContext;
-    
-    public void doSomething() {
-        List<ServiceWrapper> services = serviceContext.getServices();
-        // Work with services
-    }
-}
-```
-
-### 4. Executing Commands
-
-Commands can be executed via:
-
-1. **REST API**: `POST /api/commands/execute`
-2. **Telnet**: Connect to port 9000
-3. **SSH**: Connect to port 9022
-4. **Actuator**: (if configured)
-
-## Example Usage
-
-### Accessing a Hitorro Service
-
-```java
-@Service
-public class MyBusinessLogic {
-    
-    @Autowired
-    private HitorroServiceFactory serviceFactory;
-    
-    public void processData() {
-        // Check if service is available
-        if (serviceFactory.isServiceAvailable(BasicService.class)) {
-            BasicService basicService = serviceFactory.getService(BasicService.class);
-            // Use the service
-            // basicService.doSomething();
-        }
-    }
-}
-```
-
-### Creating Custom Endpoints
-
-```java
-@RestController
-@RequestMapping("/api/custom")
-public class CustomController {
-    
-    @Autowired
-    private HitorroServiceFactory serviceFactory;
-    
-    @GetMapping("/process")
-    public ResponseEntity<?> process() {
-        // Use Hitorro services
-        // Process data
-        // Return results
-        return ResponseEntity.ok(results);
-    }
-}
-```
-
-## Testing
-
-```bash
-# Run all tests
-mvn test
-
-# Run specific test
-mvn test -Dtest=HitorroExampleApplicationTests
+├── react-app/                            # React UI source
+├── data/                                 # H2 database
+├── docker/                               # Docker configurations
+├── docker_build/                         # Docker build scripts
+└── README.md
 ```
 
 ## Troubleshooting
 
-### Services Not Initializing
+### Application won't start
 
-Check the logs for initialization errors:
-```bash
-tail -f logs/application.log
-```
+Check that:
+- Java 21+ is installed: `java -version`
+- Ports 8080, 5050 are available
+- `ht-bin` and `ht-home` paths exist
 
-Ensure `hitorro.services.enabled=true` in `application.yml`.
+### Structured logging not working
 
-### Port Already in Use
+Check that:
+- Kafka is running and accessible
+- `hitorro.structured-logging.enabled=true`
+- Application has been restarted
 
-Change the server port in `application.yml`:
-```yaml
-server:
-  port: 8081
-```
+### React UI not loading
 
-Or CLI ports:
-```yaml
-hitorro:
-  cli:
-    telnet-port: 9001
-    ssh-port: 9023
-```
-
-### Command Execution Fails
-
-Commands are executed via `CommandSession.executeToLog()` which logs output.
-Check the logs to see command results.
-
-## Advanced Configuration
-
-### Enabling DMS
-
-If you need to use Hitorro's Document Management System:
-
-1. Set `hitorro.dms.enabled=true` in `application.yml`
-2. Configure database connection
-3. Inject `DMSSessionFactory` to work with DMS
-
-```java
-@Service
-public class DocumentService {
-    
-    @Autowired
-    private DMSSessionFactory dmsFactory;
-    
-    @Transactional
-    public void workWithDMS() {
-        // DMS session automatically managed
-        // Use unified ID system
-    }
-}
-```
-
-### Custom Service Registration
-
-If you have custom Hitorro services:
-
-```java
-@Configuration
-public class CustomHitorroConfig {
-    
-    @PostConstruct
-    public void registerCustomServices() {
-        ServiceContext sc = ServiceContext.getSC();
-        sc.addModule("com.example.MyCustomService");
-    }
-}
-```
-
-## Production Considerations
-
-1. **Logging**: Configure appropriate logging levels for production
-2. **Security**: Add Spring Security for endpoint protection
-3. **Monitoring**: Use Actuator metrics for monitoring
-4. **Database**: Configure connection pooling for DMS if used
-5. **CLI Access**: Consider disabling or securing CLI ports in production
-
-## Next Steps
-
-- Explore other Hitorro modules (text-core, analysis, etc.)
-- Add Spring Security for authentication
-- Implement custom commands
-- Use DMS for document management
-- Add Spring Cloud Config for distributed configuration
-
-## Resources
-
-- [Hitorro Framework](https://github.com/geekychris/hitorro-all)
-- [Hitorro Spring Boot Integration](https://github.com/geekychris/hitorro-spring-boot)
-- [Spring Boot Documentation](https://spring.io/projects/spring-boot)
+The React UI is served by Spring Boot. If you see 404 errors:
+1. Build the React app: `cd react-app && npm run build`
+2. Restart Spring Boot
 
 ## License
 
-MIT License - Same as Hitorro framework
+Copyright (c) 2006-2026 Chris Collins. See LICENSE file for details.
