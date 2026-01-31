@@ -211,6 +211,13 @@
             <artifactId>spring-kafka</artifactId>
         </dependency>
 
+        <!-- Structured Logging Library - BaseStructuredLogger library -->
+        <dependency>
+            <groupId>com.logging</groupId>
+            <artifactId>structured-logging-java</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

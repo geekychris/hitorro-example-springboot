@@ -247,28 +247,28 @@ docker exec kafka kafka-console-consumer \\
       </div>
 
       <div className="section">
-        <div className="section-header">
-          <h3>Schema Configuration</h3>
-        </div>
-        <div className="section-content">
-          <div className="info-box">
-            <p>
-              Log schema is defined in: <code>src/main/resources/log-configs/user-activity-log.json</code>
-            </p>
-            <p style={{ marginTop: '10px' }}>
-              The schema defines:
-            </p>
-            <ul>
-              <li>Field types and requirements</li>
-              <li>Kafka topic configuration (partitions, retention)</li>
-              <li>Iceberg table configuration (for downstream processing)</li>
-            </ul>
-            <p style={{ marginTop: '10px' }}>
-              See <code>STRUCTURED_LOGGING.md</code> for complete documentation.
-            </p>
+          <div className="section-header">
+            <h3>Schema Configuration</h3>
+          </div>
+          <div className="section-content">
+            <div className="info-box">
+              <p>
+                Log schema is defined in: <code>src/main/resources/log-configs/user_activity_log.json</code>
+              </p>
+              <p style={{ marginTop: '10px' }}>
+                The schema defines:
+              </p>
+              <ul>
+                <li>Field types and requirements</li>
+                <li>Kafka topic configuration (partitions, retention)</li>
+                <li>Iceberg table configuration (for downstream processing)</li>
+              </ul>
+              <p style={{ marginTop: '10px' }}>
+                See <code>STRUCTURED_LOGGING.md</code> for complete documentation.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
       <style>{`
         .page {
