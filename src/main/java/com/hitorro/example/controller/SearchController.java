@@ -1,5 +1,6 @@
 package com.hitorro.example.controller;
 
+import com.hitorro.index.IndexManager;
 import com.hitorro.index.config.IndexConfig;
 import com.hitorro.index.indexer.JVSLuceneIndexWriter;
 import com.hitorro.index.query.JVSQueryParser;
@@ -47,18 +48,19 @@ public class SearchController {
     
     private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
     
-    private JVSLuceneIndexWriter indexWriter;
-    private JVSLuceneSearcher searcher;
+    private IndexManager indexManager;
     private Path indexPath;
-    private IndexConfig config;
-    private Type defaultType;
+    private String defaultIndexName = "default";
     
     @PostConstruct
     public void initializeIndex() {
         try {
+            // Create index manager with default language
+            indexManager = new IndexManager("en");
+            
             // Create index in temp directory for this example
-            indexPath = Paths.get(System.getProperty("java.io.tmpdir"), "hitorro-lucene-index");
-            logger.info("Initializing Lucene index at: {}", indexPath);
+            indexPath = Paths.get(System.getProperty("java.io.tmpdir"), "hitorro-lucene-indexes");
+            logger.info("Initializing Lucene indexes at: {}", indexPath);
             
             // IndexConfig will automatically use FieldPatternAnalyzerWrapper
             // which selects analyzers based on field name suffixes (Solr-style)
@@ -66,23 +68,18 @@ public class SearchController {
             //   *.text_en_s -> EnglishAnalyzer (with stemming, stop words)
             //   *.text_de_m -> GermanAnalyzer (with compound noun splitting, umlaut normalization)
             //   *.identifier_s -> KeywordAnalyzer (exact match, no tokenization)
-            config = IndexConfig.builder()
-                    .filesystem(indexPath)
+            IndexConfig config = IndexConfig.builder()
+                    .filesystem(indexPath.resolve(defaultIndexName))
                     .build();
             
             // Get default type for core_sysobject
-            defaultType = JsonTypeSystem.getMe().getType("core_sysobject");
+            Type defaultType = JsonTypeSystem.getMe().getType("core_sysobject");
             
-            // Create the index writer (creates index if doesn't exist)
-            indexWriter = new JVSLuceneIndexWriter(config);
+            // Create default index
+            indexManager.createIndex(defaultIndexName, config, defaultType);
+            indexManager.commit(defaultIndexName);
             
-            // Commit to create an empty index
-            indexWriter.commit();
-            
-            // Now create the searcher (index exists)
-            searcher = new JVSLuceneSearcher(config, defaultType, "en");
-            
-            logger.info("Lucene index initialized successfully at: {}", indexPath);
+            logger.info("Default Lucene index initialized successfully at: {}", indexPath.resolve(defaultIndexName));
         } catch (Exception e) {
             logger.error("Failed to initialize Lucene index", e);
             throw new RuntimeException("Failed to initialize search index", e);
@@ -92,15 +89,12 @@ public class SearchController {
     @PreDestroy
     public void closeIndex() {
         try {
-            if (indexWriter != null) {
-                indexWriter.close();
+            if (indexManager != null) {
+                indexManager.close();
             }
-            if (searcher != null) {
-                searcher.close();
-            }
-            logger.info("Lucene index closed");
+            logger.info("Lucene indexes closed");
         } catch (Exception e) {
-            logger.error("Error closing index", e);
+            logger.error("Error closing indexes", e);
         }
     }
     
@@ -113,16 +107,19 @@ public class SearchController {
     @ApiResponse(responseCode = "400", description = "Invalid document format")
     @ApiResponse(responseCode = "500", description = "Indexing error")
     public ResponseEntity<Map<String, Object>> indexDocument(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
             @Parameter(description = "JVS document as JSON string")
             @RequestBody String jsonDocument) {
         try {
             JVS document = JVS.read(jsonDocument);
-            indexWriter.indexDocument(document);
-            indexWriter.commit();
+            indexManager.indexDocument(indexName, document);
+            indexManager.commit(indexName);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("message", "Document indexed successfully");
+            response.put("indexName", indexName);
             
             // Get document ID if available
             try {
@@ -149,6 +146,8 @@ public class SearchController {
     )
     @ApiResponse(responseCode = "200", description = "Documents indexed successfully")
     public ResponseEntity<Map<String, Object>> indexBatch(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
             @Parameter(description = "Array of JVS documents")
             @RequestBody List<String> jsonDocuments) {
         try {
@@ -156,12 +155,13 @@ public class SearchController {
             for (String jsonDoc : jsonDocuments) {
                 documents.add(JVS.read(jsonDoc));
             }
-            indexWriter.indexDocuments(documents);
-            indexWriter.commit();
+            indexManager.indexDocuments(indexName, documents);
+            indexManager.commit(indexName);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("indexed", documents.size());
+            response.put("indexName", indexName);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -180,12 +180,21 @@ public class SearchController {
     )
     @ApiResponse(responseCode = "200", description = "Stream processed successfully")
     public ResponseEntity<Map<String, Object>> indexStream(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
             @Parameter(description = "NDJson stream of documents")
             @RequestBody String ndjsonStream) {
         try {
             java.io.InputStream inputStream = new java.io.ByteArrayInputStream(ndjsonStream.getBytes());
             
-            IndexerStream indexerStream = new IndexerStream(indexWriter, 100, true);
+            IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
+            if (handle == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Index not found: " + indexName);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+            }
+            IndexerStream indexerStream = new IndexerStream(handle.getWriter(), 100, true);
             List<IndexerStream.IndexingResult> results = indexerStream.indexFromStream(inputStream)
                     .collectList()
                     .block();
@@ -195,6 +204,7 @@ public class SearchController {
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("indexed", indexed);
+            response.put("indexName", indexName);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -214,6 +224,8 @@ public class SearchController {
     @ApiResponse(responseCode = "200", description = "Search completed successfully")
     @ApiResponse(responseCode = "400", description = "Invalid query syntax")
     public ResponseEntity<Map<String, Object>> search(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
             @Parameter(description = "Lucene query string (supports fielded search like title.mls:fox)")
             @RequestParam String query,
             
@@ -223,16 +235,15 @@ public class SearchController {
             @Parameter(description = "Comma-separated list of facet fields")
             @RequestParam(required = false) String facets) {
         try {
-            searcher = searcher.refresh();
-            
             List<String> facetList = facets != null && !facets.isEmpty()
                     ? Arrays.asList(facets.split(","))
                     : null;
             
-            SearchResult result = searcher.search(query, 0, maxResults, facetList);
+            SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList);
             
             Map<String, Object> response = new HashMap<>();
             response.put("query", query);
+            response.put("indexName", indexName);
             response.put("totalHits", result.getTotalHits());
             
             // Convert JVS documents to maps for JSON serialization
@@ -278,6 +289,8 @@ public class SearchController {
     @ApiResponse(responseCode = "200", description = "Stream started", 
                  content = @Content(mediaType = "application/x-ndjson"))
     public ResponseEntity<StreamingResponseBody> searchStream(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
             @Parameter(description = "Lucene query string")
             @RequestParam String query,
             
@@ -289,13 +302,11 @@ public class SearchController {
         
         StreamingResponseBody stream = outputStream -> {
             try {
-                searcher = searcher.refresh();
-                
                 List<String> facetList = facets != null && !facets.isEmpty()
                         ? Arrays.asList(facets.split(","))
                         : null;
                 
-                SearchResult result = searcher.search(query, 0, maxResults, facetList);
+                SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList);
                 String ndjson = SearchResponseStream.toNDJsonString(result);
                 
                 outputStream.write(ndjson.getBytes());
@@ -347,14 +358,24 @@ public class SearchController {
             description = "Deletes all documents from the index"
     )
     @ApiResponse(responseCode = "200", description = "Index cleared successfully")
-    public ResponseEntity<Map<String, Object>> clearIndex() {
+    public ResponseEntity<Map<String, Object>> clearIndex(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName) {
         try {
-            indexWriter.deleteAll();
-            indexWriter.commit();
+            IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
+            if (handle == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Index not found: " + indexName);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+            }
+            handle.getWriter().deleteAll();
+            indexManager.commit(indexName);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("message", "Index cleared successfully");
+            response.put("indexName", indexName);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -372,15 +393,17 @@ public class SearchController {
             description = "Returns statistics about the current index"
     )
     @ApiResponse(responseCode = "200", description = "Statistics retrieved")
-    public ResponseEntity<Map<String, Object>> getStats() {
+    public ResponseEntity<Map<String, Object>> getStats(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName) {
         try {
-            searcher = searcher.refresh();
             // Use a simple query to get document count
-            SearchResult countResult = searcher.search("*:*", 0, 1, null);
+            SearchResult countResult = indexManager.search(indexName, "*:*", 0, 1, null);
             
             Map<String, Object> stats = new HashMap<>();
+            stats.put("indexName", indexName);
             stats.put("numDocuments", countResult.getTotalHits());
-            stats.put("indexPath", indexPath.toString());
+            stats.put("indexPath", indexPath.resolve(indexName).toString());
             
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
@@ -398,12 +421,20 @@ public class SearchController {
             description = "Returns all field names present in the Lucene index"
     )
     @ApiResponse(responseCode = "200", description = "Field names retrieved")
-    public ResponseEntity<Map<String, Object>> getIndexedFields() {
+    public ResponseEntity<Map<String, Object>> getIndexedFields(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName) {
         try {
-            searcher = searcher.refresh();
+            IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
+            if (handle == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Index not found: " + indexName);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+            }
             
             // Get the index reader and collect all field names
-            org.apache.lucene.index.IndexReader reader = searcher.getIndexSearcher().getIndexReader();
+            org.apache.lucene.index.IndexReader reader = handle.getSearcher().getIndexSearcher().getIndexReader();
             Set<String> fieldNames = new HashSet<>();
             
             for (org.apache.lucene.index.LeafReaderContext context : reader.leaves()) {
@@ -414,6 +445,7 @@ public class SearchController {
             }
             
             Map<String, Object> response = new HashMap<>();
+            response.put("indexName", indexName);
             response.put("fieldCount", fieldNames.size());
             response.put("fields", new ArrayList<>(fieldNames).stream().sorted().toList());
             
@@ -520,6 +552,135 @@ public class SearchController {
             e.printStackTrace(new java.io.PrintWriter(sw));
             result.put("stack_trace", sw.toString());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+    
+    // ========== Multi-Index Operations ==========
+    
+    @PostMapping("/indexes")
+    @Operation(
+            summary = "Create a new index",
+            description = "Creates a new named index with the specified type"
+    )
+    @ApiResponse(responseCode = "200", description = "Index created successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid parameters")
+    public ResponseEntity<Map<String, Object>> createIndex(
+            @Parameter(description = "Name for the new index")
+            @RequestParam String indexName,
+            @Parameter(description = "Type name for the index (defaults to 'core_sysobject')")
+            @RequestParam(defaultValue = "core_sysobject") String typeName) {
+        try {
+            // Check if index already exists
+            if (indexManager.hasIndex(indexName)) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Index already exists: " + indexName);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Get type
+            Type type = JsonTypeSystem.getMe().getType(typeName);
+            if (type == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Type not found: " + typeName);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Create index config
+            IndexConfig config = IndexConfig.builder()
+                    .filesystem(indexPath.resolve(indexName))
+                    .build();
+            
+            // Create the index
+            indexManager.createIndex(indexName, config, type);
+            indexManager.commit(indexName);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "Index created successfully");
+            response.put("indexName", indexName);
+            response.put("typeName", typeName);
+            response.put("indexPath", indexPath.resolve(indexName).toString());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error creating index", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @GetMapping("/indexes")
+    @Operation(
+            summary = "List all indexes",
+            description = "Returns a list of all available index names"
+    )
+    @ApiResponse(responseCode = "200", description = "Index list retrieved")
+    public ResponseEntity<Map<String, Object>> listIndexes() {
+        try {
+            Set<String> indexNames = indexManager.getIndexNames();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("indexes", new ArrayList<>(indexNames));
+            response.put("count", indexNames.size());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error listing indexes", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @GetMapping("/query/multi")
+    @Operation(
+            summary = "Search across multiple indexes",
+            description = "Performs a Lucene query against multiple indexes simultaneously"
+    )
+    @ApiResponse(responseCode = "200", description = "Multi-index search completed successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid query syntax")
+    public ResponseEntity<Map<String, Object>> searchMultiple(
+            @Parameter(description = "Comma-separated list of index names to search")
+            @RequestParam String indexes,
+            @Parameter(description = "Lucene query string")
+            @RequestParam String query,
+            @Parameter(description = "Maximum number of results to return")
+            @RequestParam(defaultValue = "10") int maxResults) {
+        try {
+            List<String> indexList = Arrays.asList(indexes.split(","));
+            
+            SearchResult result = indexManager.searchMultiple(indexList, query, 0, maxResults);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("query", query);
+            response.put("indexes", indexList);
+            response.put("totalHits", result.getTotalHits());
+            
+            // Convert JVS documents to maps for JSON serialization
+            List<Object> docs = new ArrayList<>();
+            for (JVS doc : result.getDocuments()) {
+                docs.add(doc.getJsonNode());
+            }
+            response.put("documents", docs);
+            
+            return ResponseEntity.ok(response);
+        } catch (ParseException e) {
+            logger.error("Invalid query syntax", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", "Invalid query syntax: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        } catch (Exception e) {
+            logger.error("Error executing multi-index search", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 }

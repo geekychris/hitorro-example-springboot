@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Search, FileText, TrendingUp, Trash2, Database, BarChart3 } from 'lucide-react';
+import { Search, FileText, TrendingUp, Trash2, Database, BarChart3, Plus, Layers } from 'lucide-react';
 import ReactJson from '@microlink/react-json-view';
 import axios from 'axios';
 
@@ -9,14 +9,21 @@ interface SearchResult {
   totalHits: number;
   documents: any[];
   facets?: Record<string, Record<string, number>>;
+  indexName?: string;
+  indexes?: string[];
 }
 
 interface IndexStats {
+  indexName: string;
   numDocuments: number;
   indexPath: string;
 }
 
 export default function SearchPage() {
+  const [selectedIndex, setSelectedIndex] = useState('default');
+  const [newIndexName, setNewIndexName] = useState('');
+  const [newIndexType, setNewIndexType] = useState('core_sysobject');
+  const [multiIndexNames, setMultiIndexNames] = useState<string[]>([]);
   const [query, setQuery] = useState('*:*');
   const [maxResults, setMaxResults] = useState(10);
   const [facetFields, setFacetFields] = useState<string[]>([]);
@@ -50,11 +57,22 @@ export default function SearchPage() {
   }
 }`);
 
+  // Fetch list of all indexes
+  const { data: indexList, refetch: refetchIndexList } = useQuery({
+    queryKey: ['indexList'],
+    queryFn: async () => {
+      const response = await axios.get<{ indexes: string[]; count: number }>('/api/search/indexes');
+      return response.data;
+    },
+  });
+
   // Fetch index stats
   const { data: stats, refetch: refetchStats } = useQuery({
-    queryKey: ['indexStats'],
+    queryKey: ['indexStats', selectedIndex],
     queryFn: async () => {
-      const response = await axios.get<IndexStats>('/api/search/stats');
+      const params = new URLSearchParams();
+      params.append('indexName', selectedIndex);
+      const response = await axios.get<IndexStats>('/api/search/stats', { params });
       return response.data;
     },
   });
@@ -70,18 +88,40 @@ export default function SearchPage() {
 
   // Fetch indexed field names
   const { data: indexedFields, refetch: refetchFields } = useQuery({
-    queryKey: ['indexedFields'],
+    queryKey: ['indexedFields', selectedIndex],
     queryFn: async () => {
-      const response = await axios.get<{ fieldCount: number; fields: string[] }>('/api/search/fields');
+      const params = new URLSearchParams();
+      params.append('indexName', selectedIndex);
+      const response = await axios.get<{ fieldCount: number; fields: string[] }>('/api/search/fields', { params });
       return response.data;
+    },
+  });
+
+  // Create index mutation
+  const createIndexMutation = useMutation({
+    mutationFn: async ({ name, typeName }: { name: string; typeName: string }) => {
+      const params = new URLSearchParams();
+      params.append('indexName', name);
+      params.append('typeName', typeName);
+      const response = await axios.post('/api/search/indexes', null, { params });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      refetchIndexList();
+      setSelectedIndex(data.indexName);
+      setNewIndexName('');
+      alert('Index created successfully!');
     },
   });
 
   // Index document mutation
   const indexMutation = useMutation({
     mutationFn: async (jsonDoc: string) => {
+      const params = new URLSearchParams();
+      params.append('indexName', selectedIndex);
       const response = await axios.post('/api/search/index', jsonDoc, {
         headers: { 'Content-Type': 'application/json' },
+        params,
       });
       return response.data;
     },
@@ -90,7 +130,7 @@ export default function SearchPage() {
     },
   });
 
-  // Search mutation
+  // Search mutation (single or multiple indexes)
   const searchMutation = useMutation({
     mutationFn: async ({
       query,
@@ -108,8 +148,17 @@ export default function SearchPage() {
         params.append('facets', facets.join(','));
       }
 
-      const response = await axios.get<SearchResult>('/api/search/query', { params });
-      return response.data;
+      // Multi-index search if multiple selected
+      if (multiIndexNames.length > 1) {
+        params.append('indexes', multiIndexNames.join(','));
+        const response = await axios.get<SearchResult>('/api/search/query/multi', { params });
+        return response.data;
+      } else {
+        // Single index search
+        params.append('indexName', selectedIndex);
+        const response = await axios.get<SearchResult>('/api/search/query', { params });
+        return response.data;
+      }
     },
     onSuccess: (data) => {
       setSearchResult(data);
@@ -119,7 +168,9 @@ export default function SearchPage() {
   // Clear index mutation
   const clearMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.delete('/api/search/index');
+      const params = new URLSearchParams();
+      params.append('indexName', selectedIndex);
+      const response = await axios.delete('/api/search/index', { params });
       return response.data;
     },
     onSuccess: () => {
@@ -127,6 +178,14 @@ export default function SearchPage() {
       refetchStats();
     },
   });
+
+  const handleCreateIndex = () => {
+    if (!newIndexName.trim()) {
+      alert('Please enter an index name');
+      return;
+    }
+    createIndexMutation.mutate({ name: newIndexName.trim(), typeName: newIndexType });
+  };
 
   const handleIndexDocument = () => {
     try {
@@ -142,9 +201,15 @@ export default function SearchPage() {
   };
 
   const handleClearIndex = () => {
-    if (confirm('Are you sure you want to clear the entire index?')) {
+    if (confirm(`Are you sure you want to clear the ${selectedIndex} index?`)) {
       clearMutation.mutate();
     }
+  };
+
+  const toggleMultiIndex = (indexName: string) => {
+    setMultiIndexNames((prev) =>
+      prev.includes(indexName) ? prev.filter((i) => i !== indexName) : [...prev, indexName]
+    );
   };
 
   const toggleFacet = (facet: string) => {
@@ -200,7 +265,9 @@ export default function SearchPage() {
     ];
 
     try {
-      await axios.post('/api/search/index/batch', samples.map((s) => JSON.stringify(s)));
+      const params = new URLSearchParams();
+      params.append('indexName', selectedIndex);
+      await axios.post('/api/search/index/batch', samples.map((s) => JSON.stringify(s)), { params });
       refetchStats();
       alert('Sample documents indexed successfully!');
     } catch (e) {
@@ -224,7 +291,96 @@ export default function SearchPage() {
           faceting, and multilingual content.
         </p>
 
-        {/* Index Stats */}
+        {/* Index Selection & Stats */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                <Layers size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                Active Index
+              </label>
+              <select
+                className="input"
+                value={selectedIndex}
+                onChange={(e) => {
+                  setSelectedIndex(e.target.value);
+                  setMultiIndexNames([]);
+                }}
+                style={{ width: '100%' }}
+              >
+                {indexList?.indexes.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                Create New Index
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Index name"
+                  value={newIndexName}
+                  onChange={(e) => setNewIndexName(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="button button-primary"
+                  onClick={handleCreateIndex}
+                  disabled={createIndexMutation.isPending}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  <Plus size={16} style={{ marginRight: '0.25rem' }} />
+                  {createIndexMutation.isPending ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Multi-Index Search Selection */}
+          {indexList && indexList.indexes.length > 1 && (
+            <div style={{ marginBottom: '0.75rem' }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                Multi-Index Search (select 2+ for cross-index search)
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {indexList.indexes.map((name) => (
+                  <label
+                    key={name}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0.25rem 0.5rem',
+                      background: multiIndexNames.includes(name) ? 'var(--color-primary)' : 'var(--background)',
+                      color: multiIndexNames.includes(name) ? 'white' : 'var(--text-primary)',
+                      borderRadius: '0.25rem',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={multiIndexNames.includes(name)}
+                      onChange={() => toggleMultiIndex(name)}
+                      style={{ marginRight: '0.25rem' }}
+                    />
+                    {name}
+                  </label>
+                ))}
+              </div>
+              {multiIndexNames.length > 1 && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--color-primary)' }}>
+                  Will search across {multiIndexNames.length} indexes
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {stats && (
           <div
             style={{
