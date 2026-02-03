@@ -198,6 +198,14 @@ hitorro:
 
 
 
+  # KV Store Configuration - RocksDB-based document storage
+  kvstore:
+    enabled: true  # Enable KV store bean initialization
+    path: ./data/kvstore  # Path to RocksDB database files
+    compression: SNAPPY  # Compression type: NONE, SNAPPY, ZLIB, LZ4, ZSTD
+    writeBufferSize: 67108864  # 64MB write buffer
+    maxOpenFiles: 1000  # Maximum open file descriptors
+
 # Logging
 logging:
   level:

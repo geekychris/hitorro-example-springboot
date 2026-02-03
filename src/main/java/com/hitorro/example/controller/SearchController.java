@@ -1,5 +1,7 @@
 package com.hitorro.example.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hitorro.example.search.SearchResultIterator;
 import com.hitorro.index.IndexManager;
 import com.hitorro.index.config.IndexConfig;
 import com.hitorro.index.indexer.JVSLuceneIndexWriter;
@@ -10,8 +12,12 @@ import com.hitorro.index.search.SearchResult;
 import com.hitorro.index.stream.IndexerStream;
 import com.hitorro.index.stream.SearchResponseStream;
 import com.hitorro.jsontypesystem.JVS;
-import com.hitorro.jsontypesystem.Type;
 import com.hitorro.jsontypesystem.JsonTypeSystem;
+import com.hitorro.jsontypesystem.Type;
+import com.hitorro.obj.core.solr.JVS2JVSEnrichMapper;
+import com.hitorro.kvstore.KVStore;
+import com.hitorro.kvstore.Result;
+import com.hitorro.util.core.iterator.AbstractIterator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -21,6 +27,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +41,7 @@ import jakarta.annotation.PreDestroy;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -47,10 +56,15 @@ import java.util.*;
 public class SearchController {
     
     private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
+    private static final ObjectMapper objectMapper = new ObjectMapper();
     
     private IndexManager indexManager;
     private Path indexPath;
     private String defaultIndexName = "default";
+    
+    @Autowired(required = false)
+    @Qualifier("documentStore")
+    private KVStore documentStore;
     
     @PostConstruct
     public void initializeIndex() {
@@ -173,6 +187,179 @@ public class SearchController {
         }
     }
     
+    @PostMapping("/index/withkv")
+    @Operation(
+            summary = "Index document to both Lucene and KV store",
+            description = "Indexes a document into Lucene index and stores full JSON in KV store with optional enrichment"
+    )
+    @ApiResponse(responseCode = "200", description = "Document indexed and stored successfully")
+    @ApiResponse(responseCode = "503", description = "KV store not available")
+    public ResponseEntity<Map<String, Object>> indexWithKVStore(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Enrich document before storing in KV store")
+            @RequestParam(defaultValue = "false") boolean enrichBeforeStore,
+            @Parameter(description = "JVS document as JSON string")
+            @RequestBody String jsonDocument) {
+        try {
+            if (documentStore == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "KV store not configured");
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+            }
+            
+            JVS document = JVS.read(jsonDocument);
+            
+            // Extract document ID
+            Object docIdObj = document.get("id.did");
+            String docId;
+            if (docIdObj != null) {
+                // Remove quotes if present
+                docId = docIdObj.toString().replaceAll("\"", "");
+            } else {
+                docId = UUID.randomUUID().toString();
+            }
+            
+            // Optionally enrich document before storing
+            JVS documentToStore = document;
+            if (enrichBeforeStore) {
+                logger.info("Enriching document before storing in KV store");
+                JVS2JVSEnrichMapper enrichMapper = new JVS2JVSEnrichMapper();
+                documentToStore = enrichMapper.apply(document);
+                if (documentToStore == null) {
+                    documentToStore = document; // Fallback to original
+                }
+            }
+            
+            // Store JSON in KV store (enriched or original)
+            byte[] key = docId.getBytes(StandardCharsets.UTF_8);
+            String jsonToStore = objectMapper.writeValueAsString(documentToStore.getJsonNode());
+            byte[] value = jsonToStore.getBytes(StandardCharsets.UTF_8);
+            Result<Void> storeResult = documentStore.put(key, value);
+            
+            if (!storeResult.isSuccess()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Failed to store in KV store: " + storeResult.getError().orElse("Unknown error"));
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+            }
+            
+            // Index in Lucene
+            indexManager.indexDocument(indexName, document);
+            indexManager.commit(indexName);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "Document indexed and stored");
+            response.put("indexName", indexName);
+            response.put("documentId", docId);
+            response.put("storedInKV", true);
+            response.put("indexedInLucene", true);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error indexing with KV store", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @PostMapping("/index/batch/withkv")
+    @Operation(
+            summary = "Batch index to both Lucene and KV store",
+            description = "Indexes documents into Lucene and stores full JSON in KV store using batch operations with optional enrichment"
+    )
+    @ApiResponse(responseCode = "200", description = "Documents indexed and stored successfully")
+    public ResponseEntity<Map<String, Object>> batchIndexWithKVStore(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Enrich documents before storing in KV store")
+            @RequestParam(defaultValue = "false") boolean enrichBeforeStore,
+            @Parameter(description = "Array of JVS documents")
+            @RequestBody List<String> jsonDocuments) {
+        try {
+            if (documentStore == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "KV store not configured");
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+            }
+            
+            List<JVS> documents = new ArrayList<>();
+            Map<byte[], byte[]> kvBatch = new HashMap<>();
+            List<String> documentIds = new ArrayList<>();
+            
+            // Create enrichment mapper if needed
+            JVS2JVSEnrichMapper enrichMapper = enrichBeforeStore ? new JVS2JVSEnrichMapper() : null;
+            if (enrichBeforeStore) {
+                logger.info("Enriching {} documents before storing in KV store", jsonDocuments.size());
+            }
+            
+            for (String jsonDoc : jsonDocuments) {
+                JVS document = JVS.read(jsonDoc);
+                documents.add(document);
+                
+                // Extract or generate document ID
+                Object docIdObj = document.get("id.did");
+                String docId;
+                if (docIdObj != null) {
+                    // Remove quotes if present
+                    docId = docIdObj.toString().replaceAll("\"", "");
+                } else {
+                    docId = UUID.randomUUID().toString();
+                }
+                documentIds.add(docId);
+                
+                // Optionally enrich before storing
+                JVS documentToStore = document;
+                if (enrichBeforeStore && enrichMapper != null) {
+                    documentToStore = enrichMapper.apply(document);
+                    if (documentToStore == null) {
+                        documentToStore = document; // Fallback
+                    }
+                }
+                
+                // Prepare for batch KV store (enriched or original)
+                byte[] key = docId.getBytes(StandardCharsets.UTF_8);
+                String jsonToStore = objectMapper.writeValueAsString(documentToStore.getJsonNode());
+                byte[] value = jsonToStore.getBytes(StandardCharsets.UTF_8);
+                kvBatch.put(key, value);
+            }
+            
+            // Batch store in KV store
+            Result<Void> batchResult = documentStore.batchPut(kvBatch, false);
+            if (!batchResult.isSuccess()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Failed to batch store in KV: " + batchResult.getError().orElse("Unknown error"));
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+            }
+            
+            // Batch index in Lucene
+            indexManager.indexDocuments(indexName, documents);
+            indexManager.commit(indexName);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("indexed", documents.size());
+            response.put("indexName", indexName);
+            response.put("documentIds", documentIds);
+            response.put("storedInKV", true);
+            response.put("indexedInLucene", true);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error batch indexing with KV store", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
     @PostMapping(value = "/index/stream", consumes = "application/x-ndjson")
     @Operation(
             summary = "Index documents from NDJson stream",
@@ -274,6 +461,115 @@ public class SearchController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         } catch (Exception e) {
             logger.error("Error executing search", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @GetMapping("/query/withkv")
+    @Operation(
+            summary = "Search with KV store enrichment",
+            description = "Performs search and optionally fetches full documents from KV store in batches"
+    )
+    @ApiResponse(responseCode = "200", description = "Search completed with enrichment")
+    @ApiResponse(responseCode = "400", description = "Invalid query syntax")
+    public ResponseEntity<Map<String, Object>> searchWithKV(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Lucene query string")
+            @RequestParam String query,
+            
+            @Parameter(description = "Maximum number of results to return")
+            @RequestParam(defaultValue = "10") int maxResults,
+            
+            @Parameter(description = "Fetch full documents from KV store")
+            @RequestParam(defaultValue = "true") boolean fetchFromKV,
+            
+            @Parameter(description = "Batch size for KV store fetches")
+            @RequestParam(defaultValue = "50") int batchSize,
+            
+            @Parameter(description = "Comma-separated list of facet fields")
+            @RequestParam(required = false) String facets) {
+        try {
+            if (fetchFromKV && documentStore == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "KV store not configured, cannot fetch full documents");
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+            }
+            
+            List<String> facetList = facets != null && !facets.isEmpty()
+                    ? Arrays.asList(facets.split(","))
+                    : null;
+            
+            SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("query", query);
+            response.put("indexName", indexName);
+            response.put("totalHits", result.getTotalHits());
+            response.put("fetchedFromKV", fetchFromKV);
+            
+            // Prepare documents - either from search or enriched from KV
+            List<Object> docs = new ArrayList<>();
+            
+            if (fetchFromKV) {
+                // Use SearchResultIterator with KV store enrichment
+                logger.info("Fetching {} documents from KV store in batches of {}", 
+                            result.getDocuments().size(), batchSize);
+                
+                SearchResultIterator iterator = new SearchResultIterator(
+                        result.getDocuments(), 
+                        documentStore, 
+                        batchSize
+                );
+                
+                AbstractIterator<JVS> enrichedDocs = iterator.iterator();
+                int count = 0;
+                while (enrichedDocs.hasNext()) {
+                    JVS doc = enrichedDocs.next();
+                    count++;
+                    logger.info("Got document #{}: {}", count, (doc != null ? "not null" : "NULL"));
+                    if (doc != null) {
+                        docs.add(doc.getJsonNode());
+                    }
+                }
+                enrichedDocs.close();
+                logger.info("KV enrichment complete. Added {} documents out of {} fetched", docs.size(), count);
+            } else {
+                // Return search results as-is
+                for (JVS doc : result.getDocuments()) {
+                    docs.add(doc.getJsonNode());
+                }
+            }
+            
+            response.put("documents", docs);
+            response.put("returned", docs.size());
+            
+            // Add facets if present
+            if (result.hasFacets()) {
+                Map<String, Object> facetData = new HashMap<>();
+                for (Map.Entry<String, FacetResult> entry : result.getFacets().entrySet()) {
+                    Map<String, Object> facetValues = new HashMap<>();
+                    for (FacetResult.FacetValue fv : entry.getValue().getValues()) {
+                        facetValues.put(fv.getValue(), fv.getCount());
+                    }
+                    facetData.put(entry.getKey(), facetValues);
+                }
+                response.put("facets", facetData);
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (ParseException e) {
+            logger.error("Invalid query syntax", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", "Invalid query syntax: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        } catch (Exception e) {
+            logger.error("Error executing search with KV enrichment", e);
             Map<String, Object> error = new HashMap<>();
             error.put("status", "error");
             error.put("message", e.getMessage());

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Search, FileText, TrendingUp, Trash2, Database, BarChart3, Plus, Layers } from 'lucide-react';
+import { Search, FileText, TrendingUp, Trash2, Database, BarChart3, Plus, Layers, HardDrive } from 'lucide-react';
 import ReactJson from '@microlink/react-json-view';
 import axios from 'axios';
 
@@ -28,6 +28,12 @@ export default function SearchPage() {
   const [maxResults, setMaxResults] = useState(10);
   const [facetFields, setFacetFields] = useState<string[]>([]);
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  
+  // KV Store options
+  const [useKVStore, setUseKVStore] = useState(true);
+  const [enrichBeforeStore, setEnrichBeforeStore] = useState(false);
+  const [fetchFromKV, setFetchFromKV] = useState(true);
+  const [kvBatchSize, setKvBatchSize] = useState(50);
   
   const [documentJson, setDocumentJson] = useState(`{
   "id": {
@@ -97,6 +103,19 @@ export default function SearchPage() {
     },
   });
 
+  // Fetch KV store status
+  const { data: kvStoreStatus } = useQuery({
+    queryKey: ['kvStoreStatus'],
+    queryFn: async () => {
+      try {
+        const response = await axios.get<{ status: string; type?: string }>('/api/kvstore/stats');
+        return response.data;
+      } catch (e) {
+        return { status: 'unavailable' };
+      }
+    },
+  });
+
   // Create index mutation
   const createIndexMutation = useMutation({
     mutationFn: async ({ name, typeName }: { name: string; typeName: string }) => {
@@ -114,12 +133,18 @@ export default function SearchPage() {
     },
   });
 
-  // Index document mutation
+  // Index document mutation (with optional KV store and enrichment)
   const indexMutation = useMutation({
     mutationFn: async (jsonDoc: string) => {
       const params = new URLSearchParams();
       params.append('indexName', selectedIndex);
-      const response = await axios.post('/api/search/index', jsonDoc, {
+      const endpoint = (useKVStore && kvStoreStatus?.status === 'available') 
+        ? '/api/search/index/withkv' 
+        : '/api/search/index';
+      if (useKVStore && enrichBeforeStore) {
+        params.append('enrichBeforeStore', 'true');
+      }
+      const response = await axios.post(endpoint, jsonDoc, {
         headers: { 'Content-Type': 'application/json' },
         params,
       });
@@ -130,7 +155,7 @@ export default function SearchPage() {
     },
   });
 
-  // Search mutation (single or multiple indexes)
+  // Search mutation (single or multiple indexes, with optional KV enrichment)
   const searchMutation = useMutation({
     mutationFn: async ({
       query,
@@ -148,15 +173,24 @@ export default function SearchPage() {
         params.append('facets', facets.join(','));
       }
 
+      // KV store enrichment parameters
+      if (fetchFromKV && kvStoreStatus?.status === 'available') {
+        params.append('fetchFromKV', 'true');
+        params.append('batchSize', kvBatchSize.toString());
+      }
+
       // Multi-index search if multiple selected
       if (multiIndexNames.length > 1) {
         params.append('indexes', multiIndexNames.join(','));
         const response = await axios.get<SearchResult>('/api/search/query/multi', { params });
         return response.data;
       } else {
-        // Single index search
+        // Single index search - use KV endpoint if KV enrichment enabled
         params.append('indexName', selectedIndex);
-        const response = await axios.get<SearchResult>('/api/search/query', { params });
+        const endpoint = (fetchFromKV && kvStoreStatus?.status === 'available') 
+          ? '/api/search/query/withkv' 
+          : '/api/search/query';
+        const response = await axios.get<SearchResult>(endpoint, { params });
         return response.data;
       }
     },
@@ -219,6 +253,9 @@ export default function SearchPage() {
   };
 
   const loadSampleDocuments = async () => {
+    const endpoint = (useKVStore && kvStoreStatus?.status === 'available') 
+      ? '/api/search/index/batch/withkv' 
+      : '/api/search/index/batch';
     const samples = [
       {
         id: { domain: 'sysobject', did: 'doc001' },
@@ -267,9 +304,15 @@ export default function SearchPage() {
     try {
       const params = new URLSearchParams();
       params.append('indexName', selectedIndex);
-      await axios.post('/api/search/index/batch', samples.map((s) => JSON.stringify(s)), { params });
+      if (useKVStore && enrichBeforeStore) {
+        params.append('enrichBeforeStore', 'true');
+      }
+      await axios.post(endpoint, samples.map((s) => JSON.stringify(s)), { params });
       refetchStats();
-      alert('Sample documents indexed successfully!');
+      const message = (useKVStore && kvStoreStatus?.status === 'available')
+        ? 'Sample documents indexed to Lucene and KV store!'
+        : 'Sample documents indexed successfully!';
+      alert(message);
     } catch (e) {
       alert('Error indexing samples: ' + (e as Error).message);
     }
@@ -409,6 +452,19 @@ export default function SearchPage() {
                 {stats.indexPath}
               </div>
             </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                <HardDrive size={16} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                KV Store
+              </div>
+              <div style={{ 
+                fontSize: '0.875rem', 
+                fontWeight: 'bold',
+                color: kvStoreStatus?.status === 'available' ? '#28a745' : '#6c757d'
+              }}>
+                {kvStoreStatus?.status === 'available' ? '✓ Available' : '✗ Not Available'}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -449,13 +505,44 @@ export default function SearchPage() {
               }}
               placeholder="Enter JVS document JSON..."
             />
+            {/* KV Store Indexing Option */}
+            {kvStoreStatus?.status === 'available' && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={useKVStore}
+                    onChange={(e) => setUseKVStore(e.target.checked)}
+                    style={{ marginRight: '0.5rem' }}
+                  />
+                  <HardDrive size={16} style={{ marginRight: '0.25rem' }} />
+                  <span style={{ fontSize: '0.875rem' }}>
+                    Store in KV Store (RocksDB) for full document retrieval
+                  </span>
+                </label>
+                {useKVStore && (
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginLeft: '1.5rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={enrichBeforeStore}
+                      onChange={(e) => setEnrichBeforeStore(e.target.checked)}
+                      style={{ marginRight: '0.5rem' }}
+                    />
+                    <span style={{ fontSize: '0.875rem' }}>
+                      Enrich document before storing (adds NER, segmentation, etc.)
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
             <button
               className="button button-primary"
               onClick={handleIndexDocument}
               disabled={indexMutation.isPending}
               style={{ marginTop: '0.5rem', width: '100%' }}
             >
-              {indexMutation.isPending ? 'Indexing...' : 'Index Document'}
+              {indexMutation.isPending ? 'Indexing...' : 
+                (useKVStore && kvStoreStatus?.status === 'available') ? 'Index to Lucene + KV Store' : 'Index Document'}
             </button>
             {indexMutation.isSuccess && (
               <div
@@ -607,7 +694,7 @@ export default function SearchPage() {
               value={maxResults}
               onChange={(e) => setMaxResults(parseInt(e.target.value) || 10)}
               min="1"
-              max="100"
+              max="1000"
             />
           </div>
 
@@ -634,6 +721,61 @@ export default function SearchPage() {
           </div>
         </div>
 
+        {/* KV Store Search Options */}
+        {kvStoreStatus?.status === 'available' && (
+          <div style={{ 
+            marginBottom: '1rem',
+            padding: '1rem',
+            background: 'var(--background)',
+            borderRadius: '0.375rem',
+            border: '1px solid var(--color-primary)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <HardDrive size={16} style={{ marginRight: '0.5rem', color: 'var(--color-primary)' }} />
+              <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>KV Store Options</span>
+            </div>
+            
+            <div style={{ marginBottom: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={fetchFromKV}
+                  onChange={(e) => setFetchFromKV(e.target.checked)}
+                  style={{ marginRight: '0.5rem' }}
+                />
+                <span style={{ fontSize: '0.875rem' }}>
+                  Fetch full documents from KV store (batch mode)
+                </span>
+              </label>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '1.5rem' }}>
+                {fetchFromKV 
+                  ? 'Returns complete JSON documents from RocksDB'
+                  : 'Returns only indexed fields from Lucene (faster)'}
+              </div>
+            </div>
+            
+            {fetchFromKV && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                  Batch Size (documents fetched per RocksDB operation)
+                </label>
+                <input
+                  type="number"
+                  className="input"
+                  value={kvBatchSize}
+                  onChange={(e) => setKvBatchSize(parseInt(e.target.value) || 50)}
+                  min="1"
+                  max="200"
+                  style={{ width: '150px' }}
+                />
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                  Recommended: 50-100 for best performance
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           className="button button-primary"
           onClick={handleSearch}
@@ -641,7 +783,10 @@ export default function SearchPage() {
           style={{ width: '100%' }}
         >
           <Search size={16} />
-          {searchMutation.isPending ? 'Searching...' : 'Search'}
+          {searchMutation.isPending ? 'Searching...' : 
+            (fetchFromKV && kvStoreStatus?.status === 'available') 
+              ? 'Search with KV Enrichment' 
+              : 'Search'}
         </button>
 
         {searchMutation.isError && (
