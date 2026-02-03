@@ -8,6 +8,7 @@ import CommandsPage from './pages/CommandsPage';
 import RestExplorerPage from './pages/RestExplorerPage';
 import ServicesExplorerPage from './pages/ServicesExplorerPage';
 import StructuredLoggingPage from './pages/StructuredLoggingPage';
+import SearchPage from './pages/SearchPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,7 +19,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services' | 'logging';
+type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services' | 'logging' | 'search';
 
 interface Tab {
   id: TabId;
@@ -30,6 +31,7 @@ const tabs: Tab[] = [
   { id: 'dms', label: 'Document Management', description: 'Manage documents, containers, versions, and content (includes transformer)' },
   { id: 'crawler', label: 'Filesystem Crawler', description: 'Import files and directories into DMS' },
   { id: 'types', label: 'Type System', description: 'JSON Type System enrichment and field exploration' },
+  { id: 'search', label: 'Search', description: 'Lucene-based document search and indexing with facets' },
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },
   { id: 'rest', label: 'REST API Explorer', description: 'Discover and test REST endpoints with streaming support' },
   { id: 'services', label: 'Services', description: 'Explore Hitorro services and dependency hierarchy' },
@@ -47,6 +49,8 @@ function App() {
         return <CrawlerPage />;
       case 'types':
         return <TypeSystemPage />;
+      case 'search':
+        return <SearchPage />;
       case 'commands':
         return <CommandsPage />;
       case 'rest':

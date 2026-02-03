@@ -1,0 +1,3 @@
+{"type":"demo_product","id":{"did":"prod-001","domain":"test"},"name":"Laptop Computer","description":{"mls":{"text_en":"High-performance laptop for professionals"}},"brand":"TechCorp","price":1299.99,"sku":"LAP-001","stock_quantity":50}
+{"type":"demo_product","id":{"did":"prod-002","domain":"test"},"name":"Wireless Mouse","description":{"mls":{"text_en":"Ergonomic wireless mouse with precision tracking"}},"brand":"PeripheralPro","price":29.99,"sku":"MOU-002","stock_quantity":200}
+{"type":"demo_product","id":{"did":"prod-003","domain":"test"},"name":"Mechanical Keyboard","description":{"mls":{"text_en":"RGB mechanical keyboard with Cherry MX switches"}},"brand":"KeyMaster","price":149.99,"sku":"KEY-003","stock_quantity":75}

@@ -180,7 +180,7 @@ hitorro:
   
   # Test Framework Configuration
   test:
-    enabled: true  # Enable TestServerService
+    enabled: false  # Enable TestServerService
     run-on-startup: true  # Disable automatic test execution on server startup
   
   # Structured Logging Configuration

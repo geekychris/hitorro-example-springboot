@@ -26,7 +26,39 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <hitorro.version>3.0.0</hitorro.version>
+        <lucene.version>9.11.1</lucene.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Force Lucene 9.11.1 across all dependencies -->
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-core</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-analysis-common</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-queryparser</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-backward-codecs</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.lucene</groupId>
+                <artifactId>lucene-facet</artifactId>
+                <version>${lucene.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Hitorro Spring Boot Starter -->
@@ -47,6 +79,11 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <!-- Exclude lucene-codecs - conflicts with backward-codecs -->
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>lucene-codecs</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -70,6 +107,11 @@
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-log4j12</artifactId>
                 </exclusion>
+                <!-- Exclude lucene-codecs - conflicts with backward-codecs -->
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>lucene-codecs</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         
@@ -91,6 +133,11 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <!-- Exclude lucene-codecs - conflicts with backward-codecs -->
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>lucene-codecs</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -114,6 +161,11 @@
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-log4j12</artifactId>
                 </exclusion>
+                <!-- Exclude lucene-codecs - conflicts with backward-codecs -->
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>lucene-codecs</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         
@@ -136,6 +188,11 @@
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-log4j12</artifactId>
                 </exclusion>
+                <!-- Exclude lucene-codecs - conflicts with backward-codecs -->
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>lucene-codecs</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         
@@ -143,6 +200,33 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-test</artifactId>
+            <version>3.0.0</version>
+            <exclusions>
+                <!-- Exclude Log4j 1.x - Spring Boot uses Logback -->
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-reload4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <!-- Exclude lucene-codecs - conflicts with backward-codecs -->
+                <exclusion>
+                    <groupId>org.apache.lucene</groupId>
+                    <artifactId>lucene-codecs</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        
+        <!-- Hitorro Index (for Lucene-based search and indexing) -->
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-index</artifactId>
             <version>3.0.0</version>
             <exclusions>
                 <!-- Exclude Log4j 1.x - Spring Boot uses Logback -->
