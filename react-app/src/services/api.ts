@@ -18,6 +18,9 @@ import type {
   OllamaStatus,
   SemanticSearchRequest,
   SemanticSearchResponse,
+  TranslateRequest,
+  TranslateResponse,
+  TranslationStatus,
 } from '../types/api';
 
 const api = axios.create({
@@ -151,6 +154,16 @@ export const typeSystemApi = {
   
   getFieldValue: (json: string, fieldPath: string) =>
     api.post<any>('/jvs/field', { json, fieldPath }),
+  
+  // Translation API
+  translateJVS: (request: TranslateRequest) =>
+    api.post<TranslateResponse>('/jvs/translate', request),
+  
+  getTranslationStatus: () =>
+    api.get<TranslationStatus>('/jvs/translate/status'),
+  
+  getSupportedLanguages: () =>
+    api.get<Record<string, string>>('/jvs/translate/languages'),
 };
 
 // CommandDef API - Uses Hitorro CommandRegistry with @CommandDef annotation scanning

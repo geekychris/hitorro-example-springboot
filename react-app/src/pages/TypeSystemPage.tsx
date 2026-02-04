@@ -1,9 +1,27 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Sparkles, Code, Search, ChevronRight, ChevronDown, Tag, Database, Layers } from 'lucide-react';
+import { Sparkles, Code, Search, ChevronRight, ChevronDown, Tag, Database, Layers, Languages, Globe } from 'lucide-react';
 import ReactJson from '@microlink/react-json-view';
 import { typeSystemApi } from '../services/api';
-import type { JVSEnrichRequest, TypeField } from '../types/api';
+import type { JVSEnrichRequest, TypeField, TranslateRequest } from '../types/api';
+
+// Supported languages for translation
+const SUPPORTED_LANGUAGES: Record<string, string> = {
+  en: 'English',
+  de: 'German',
+  es: 'Spanish',
+  fr: 'French',
+  it: 'Italian',
+  pt: 'Portuguese',
+  ja: 'Japanese',
+  zh: 'Chinese (Simplified)',
+  ko: 'Korean',
+  ar: 'Arabic',
+  ru: 'Russian',
+  nl: 'Dutch',
+  pl: 'Polish',
+  sv: 'Swedish',
+};
 
 export default function TypeSystemPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>(['ner', 'segmented']);
@@ -31,11 +49,24 @@ export default function TypeSystemPage() {
   }
 }`);
   const [enrichedData, setEnrichedData] = useState<any>(null);
+  
+  // Translation state
+  const [translatedData, setTranslatedData] = useState<any>(null);
+  const [sourceLanguage, setSourceLanguage] = useState('en');
+  const [targetLanguages, setTargetLanguages] = useState<string[]>(['de', 'es', 'ja', 'zh']);
+  const [mlsFields, setMlsFields] = useState('title');
 
   const enrichMutation = useMutation({
     mutationFn: (request: JVSEnrichRequest) => typeSystemApi.enrichJVS(request),
     onSuccess: (response) => {
       setEnrichedData(response.data);
+    },
+  });
+  
+  const translateMutation = useMutation({
+    mutationFn: (request: TranslateRequest) => typeSystemApi.translateJVS(request),
+    onSuccess: (response) => {
+      setTranslatedData(response.data);
     },
   });
 
@@ -61,6 +92,37 @@ export default function TypeSystemPage() {
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
     );
+  };
+  
+  const toggleTargetLanguage = (lang: string) => {
+    setTargetLanguages(prev =>
+      prev.includes(lang)
+        ? prev.filter(l => l !== lang)
+        : [...prev, lang]
+    );
+  };
+  
+  const handleTranslate = () => {
+    try {
+      JSON.parse(jsonInput);
+      const fields = mlsFields.split(',').map(f => f.trim()).filter(f => f);
+      if (fields.length === 0) {
+        alert('Please specify at least one MLS field');
+        return;
+      }
+      if (targetLanguages.length === 0) {
+        alert('Please select at least one target language');
+        return;
+      }
+      translateMutation.mutate({
+        json: jsonInput,
+        mlsFields: fields,
+        sourceLanguage,
+        targetLanguages: targetLanguages.filter(l => l !== sourceLanguage),
+      });
+    } catch (e) {
+      alert('Invalid JSON: ' + (e as Error).message);
+    }
   };
 
   return (
@@ -146,19 +208,124 @@ export default function TypeSystemPage() {
               </p>
             </div>
 
-            <button
-              className="button button-primary"
-              onClick={handleEnrich}
-              disabled={enrichMutation.isPending}
-              style={{ marginTop: '0.75rem', width: '100%' }}
-            >
-              <Sparkles size={16} />
-              {enrichMutation.isPending ? 'Enriching...' : 'Enrich'}{selectedTags.length > 0 && ` (${selectedTags.join(', ')})`}
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+              <button
+                className="button button-primary"
+                onClick={handleEnrich}
+                disabled={enrichMutation.isPending}
+                style={{ flex: 1 }}
+              >
+                <Sparkles size={16} />
+                {enrichMutation.isPending ? 'Enriching...' : 'Enrich'}{selectedTags.length > 0 && ` (${selectedTags.join(', ')})`}
+              </button>
+            </div>
+            
+            {/* Translation Section */}
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#e0f2fe', borderRadius: '0.375rem', border: '1px solid #0ea5e9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <Languages size={18} style={{ color: '#0284c7' }} />
+                <strong style={{ fontSize: '0.875rem', color: '#0284c7' }}>MLS Translation (AI)</strong>
+              </div>
+              
+              {/* MLS Fields Input */}
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                  MLS Fields (comma-separated):
+                </label>
+                <input
+                  type="text"
+                  value={mlsFields}
+                  onChange={(e) => setMlsFields(e.target.value)}
+                  placeholder="title, description"
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    fontSize: '0.875rem',
+                    border: '1px solid #0ea5e9',
+                    borderRadius: '0.25rem',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+              
+              {/* Source Language */}
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                  Source Language:
+                </label>
+                <select
+                  value={sourceLanguage}
+                  onChange={(e) => setSourceLanguage(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    fontSize: '0.875rem',
+                    border: '1px solid #0ea5e9',
+                    borderRadius: '0.25rem',
+                  }}
+                >
+                  {Object.entries(SUPPORTED_LANGUAGES).map(([code, name]) => (
+                    <option key={code} value={code}>{name} ({code})</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Target Languages */}
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                  Target Languages:
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {Object.entries(SUPPORTED_LANGUAGES).map(([code, name]) => (
+                    code !== sourceLanguage && (
+                      <label key={code} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={targetLanguages.includes(code)}
+                          onChange={() => toggleTargetLanguage(code)}
+                          style={{ marginRight: '0.25rem' }}
+                        />
+                        <span>{name}</span>
+                      </label>
+                    )
+                  ))}
+                </div>
+              </div>
+              
+              <button
+                className="button"
+                onClick={handleTranslate}
+                disabled={translateMutation.isPending}
+                style={{ 
+                  width: '100%', 
+                  background: '#0284c7', 
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.375rem',
+                  cursor: translateMutation.isPending ? 'wait' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                <Globe size={16} />
+                {translateMutation.isPending ? 'Translating...' : `Translate to ${targetLanguages.filter(l => l !== sourceLanguage).length} languages`}
+              </button>
+              
+              {translateMutation.isPending && (
+                <p style={{ fontSize: '0.75rem', color: '#0369a1', marginTop: '0.5rem', marginBottom: 0 }}>
+                  ⏳ Translation may take 10-30 seconds depending on text length and number of languages...
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
-            <h4 style={{ marginBottom: '0.5rem' }}>Enriched Result</h4>
+            <h4 style={{ marginBottom: '0.5rem' }}>
+              {translatedData ? 'Translated Result' : 'Enriched Result'}
+            </h4>
             <div
               style={{
                 minHeight: '300px',
@@ -168,7 +335,17 @@ export default function TypeSystemPage() {
                 overflow: 'auto',
               }}
             >
-              {enrichedData ? (
+              {translatedData ? (
+                <ReactJson
+                  src={translatedData.translated || translatedData.original}
+                  theme="rjv-default"
+                  collapsed={2}
+                  displayDataTypes={false}
+                  displayObjectSize={false}
+                  enableClipboard={true}
+                  name={null}
+                />
+              ) : enrichedData ? (
                 <ReactJson
                   src={enrichedData.enriched || enrichedData.original}
                   theme="rjv-default"
@@ -180,10 +357,66 @@ export default function TypeSystemPage() {
                 />
               ) : (
                 <div style={{ color: 'var(--text-secondary)' }}>
-                  Enriched JSON will appear here...
+                  Enriched or translated JSON will appear here...
                 </div>
               )}
             </div>
+            
+            {/* Translation Details */}
+            {translatedData && (
+              <div style={{ marginTop: '1rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  marginBottom: '0.5rem' 
+                }}>
+                  <strong>Translation Details</strong>
+                  <button
+                    className="button button-secondary"
+                    onClick={() => setTranslatedData(null)}
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                  >
+                    Clear
+                  </button>
+                </div>
+                
+                <div style={{ fontSize: '0.875rem', background: '#f0fdf4', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #22c55e' }}>
+                  <p style={{ margin: '0 0 0.5rem 0' }}>
+                    <strong>Status:</strong> {translatedData.success ? '✅ Success' : '❌ Failed'}
+                  </p>
+                  <p style={{ margin: '0 0 0.5rem 0' }}>
+                    <strong>Source:</strong> {SUPPORTED_LANGUAGES[translatedData.sourceLanguage] || translatedData.sourceLanguage}
+                  </p>
+                  <p style={{ margin: '0 0 0.5rem 0' }}>
+                    <strong>Targets:</strong> {translatedData.targetLanguages?.map((l: string) => SUPPORTED_LANGUAGES[l] || l).join(', ')}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Time:</strong> {translatedData.translationTimeMs}ms
+                  </p>
+                </div>
+                
+                {translatedData.fieldTranslations?.map((ft: any, idx: number) => (
+                  <div key={idx} style={{ marginTop: '0.75rem', background: '#f8fafc', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
+                    <strong style={{ fontSize: '0.875rem' }}>Field: {ft.fieldPath}</strong>
+                    {ft.error ? (
+                      <p style={{ color: '#dc2626', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>Error: {ft.error}</p>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.5rem 0' }}>
+                          <em>Source:</em> {ft.sourceText?.substring(0, 100)}{ft.sourceText?.length > 100 ? '...' : ''}
+                        </p>
+                        {ft.translations && Object.entries(ft.translations).map(([lang, text]) => (
+                          <div key={lang} style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                            <strong>{SUPPORTED_LANGUAGES[lang] || lang}:</strong> {(text as string)?.substring(0, 100)}{(text as string)?.length > 100 ? '...' : ''}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -192,8 +425,14 @@ export default function TypeSystemPage() {
             Error: {(enrichMutation.error as any)?.response?.data?.message || (enrichMutation.error as Error).message}
           </div>
         )}
+        
+        {translateMutation.error && (
+          <div className="alert alert-error">
+            Translation Error: {(translateMutation.error as any)?.response?.data?.error || (translateMutation.error as Error).message}
+          </div>
+        )}
 
-        {enrichedData && (
+        {enrichedData && !translatedData && (
           <EnrichedDataDetails data={enrichedData} />
         )}
       </div>

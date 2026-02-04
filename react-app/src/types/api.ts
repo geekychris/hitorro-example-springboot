@@ -217,3 +217,34 @@ export interface SemanticSearchResponse {
   documents: any[];
   ollamaRequired?: boolean;
 }
+
+// MLS Translation Types
+export interface TranslateRequest {
+  json: string;
+  mlsFields: string[];
+  sourceLanguage: string;
+  targetLanguages: string[];
+}
+
+export interface TranslateResponse {
+  success: boolean;
+  original: any;
+  translated: any;
+  sourceLanguage: string;
+  targetLanguages: string[];
+  fieldTranslations: FieldTranslation[];
+  translationTimeMs: number;
+  error?: string;
+}
+
+export interface FieldTranslation {
+  fieldPath: string;
+  sourceText: string;
+  translations: Record<string, string>;
+  error?: string;
+}
+
+export interface TranslationStatus {
+  available: boolean;
+  supportedLanguages: string[];
+}

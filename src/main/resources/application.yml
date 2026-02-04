@@ -85,6 +85,12 @@ management:
 
 # Hitorro Configuration
 hitorro:
+  # AI Service Configuration (for translation, summarization, Q&A)
+  ai:
+    enabled: true  # Enable AI service (requires Ollama running)
+    model-name: llama3.2  # Model for chat/translation tasks
+    embedding-model: nomic-embed-text  # Model for embeddings
+
   enabled: true
   
   # Application name shown in CLI prompt
@@ -216,6 +222,8 @@ hitorro:
     compression: SNAPPY  # Compression type: NONE, SNAPPY, ZLIB, LZ4, ZSTD
     writeBufferSize: 67108864  # 64MB write buffer
     maxOpenFiles: 1000  # Maximum open file descriptors
+
+
 
 # Embedding Configuration
 embedding:
