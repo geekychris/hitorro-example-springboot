@@ -45,6 +45,10 @@ export default function DMSPageEnhanced() {
   const [transformations, setTransformations] = useState<any[]>([]);
   const [selectedTemplateGuid, setSelectedTemplateGuid] = useState<string | null>(null);
   const [transformParameters, setTransformParameters] = useState<string>('');
+  const [showJVSConversion, setShowJVSConversion] = useState(false);
+  const [jvsConversionResult, setJvsConversionResult] = useState<any>(null);
+  const [showTypeDefinition, setShowTypeDefinition] = useState(false);
+  const [typeDefinitionResult, setTypeDefinitionResult] = useState<any>(null);
   const queryClient = useQueryClient();
 
   // Query all containers
@@ -474,6 +478,62 @@ export default function DMSPageEnhanced() {
                 >
                   <Download size={14} />
                   Download
+                </button>
+              </div>
+              
+              {/* JVS Conversion Buttons */}
+              <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                <button
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: '#667eea',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onClick={async () => {
+                    try {
+                      const response = await dmsApi.convertToJVS(selectedDocument.guid, true, true);
+                      setJvsConversionResult(response.data);
+                      setShowJVSConversion(true);
+                    } catch (error: any) {
+                      alert('Error converting to JVS: ' + (error.response?.data?.error || error.message));
+                    }
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  Convert to JVS
+                </button>
+                <button
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: '#764ba2',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onClick={async () => {
+                    try {
+                      const response = await dmsApi.getJVSTypeDefinition(selectedDocument.guid);
+                      setTypeDefinitionResult(response.data);
+                      setShowTypeDefinition(true);
+                    } catch (error: any) {
+                      alert('Error getting type definition: ' + (error.response?.data?.error || error.message));
+                    }
+                  }}
+                >
+                  <Layers size={14} />
+                  View Type Definition
                 </button>
               </div>
 
@@ -1427,6 +1487,212 @@ export default function DMSPageEnhanced() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* JVS Conversion Result Modal */}
+      {showJVSConversion && jvsConversionResult && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'var(--background)',
+            padding: '2rem',
+            borderRadius: '8px',
+            maxWidth: '800px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>JVS Conversion Result</h3>
+              <button
+                onClick={() => {
+                  setShowJVSConversion(false);
+                  setJvsConversionResult(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            {jvsConversionResult.error ? (
+              <div style={{ padding: '1rem', background: 'var(--danger, #dc3545)', color: 'white', borderRadius: '4px' }}>
+                {jvsConversionResult.error}
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--surface)', borderRadius: '4px' }}>
+                  <div><strong>Document:</strong> {jvsConversionResult.documentTitle}</div>
+                  <div><strong>Type:</strong> {jvsConversionResult.typeName}</div>
+                  {jvsConversionResult.baseType && <div><strong>Base Type:</strong> {jvsConversionResult.baseType}</div>}
+                  <div><strong>GUID:</strong> <code>{jvsConversionResult.guid}</code></div>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ marginBottom: '0.5rem' }}>JSON Output:</h4>
+                  <pre style={{
+                    padding: '1rem',
+                    background: 'var(--surface)',
+                    borderRadius: '4px',
+                    overflow: 'auto',
+                    maxHeight: '400px',
+                    fontSize: '0.85rem'
+                  }}>
+                    {JSON.stringify(jvsConversionResult.jvsJson, null, 2)}
+                  </pre>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    const jsonStr = JSON.stringify(jvsConversionResult.jvsJson, null, 2);
+                    navigator.clipboard.writeText(jsonStr);
+                    alert('JSON copied to clipboard!');
+                  }}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: 'var(--primary)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Copy JSON to Clipboard
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Type Definition Modal */}
+      {showTypeDefinition && typeDefinitionResult && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'var(--background)',
+            padding: '2rem',
+            borderRadius: '8px',
+            maxWidth: '800px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>JVS Type Definition</h3>
+              <button
+                onClick={() => {
+                  setShowTypeDefinition(false);
+                  setTypeDefinitionResult(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            {typeDefinitionResult.error ? (
+              <div style={{ padding: '1rem', background: 'var(--danger, #dc3545)', color: 'white', borderRadius: '4px' }}>
+                {typeDefinitionResult.error}
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--surface)', borderRadius: '4px' }}>
+                  <div><strong>Document Type:</strong> {typeDefinitionResult.documentType}</div>
+                  <div><strong>JVS Type:</strong> {typeDefinitionResult.typeName}</div>
+                  {typeDefinitionResult.baseType && <div><strong>Extends:</strong> {typeDefinitionResult.baseType}</div>}
+                  <div><strong>Fields:</strong> {typeDefinitionResult.fields?.length || 0}</div>
+                </div>
+                
+                <h4 style={{ marginBottom: '0.5rem' }}>Fields:</h4>
+                <div style={{ marginBottom: '1rem' }}>
+                  {typeDefinitionResult.fields && typeDefinitionResult.fields.length > 0 ? (
+                    <div style={{ display: 'grid', gap: '0.5rem' }}>
+                      {typeDefinitionResult.fields.map((field: any, idx: number) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '0.75rem',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong>{field.name}</strong>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                              {field.type}
+                              {field.vector && ' []'}
+                              {field.i18n && ' (i18n)'}
+                              {field.dynamic && ' (dynamic)'}
+                            </span>
+                          </div>
+                          {field.isPrimitive && (
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                              Primitive: {field.primitiveType}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      No fields defined
+                    </div>
+                  )}
+                </div>
+                
+                {typeDefinitionResult.typeDefinitionJson && (
+                  <div>
+                    <h4 style={{ marginBottom: '0.5rem' }}>Raw Type Definition:</h4>
+                    <pre style={{
+                      padding: '1rem',
+                      background: 'var(--surface)',
+                      borderRadius: '4px',
+                      overflow: 'auto',
+                      maxHeight: '300px',
+                      fontSize: '0.85rem'
+                    }}>
+                      {JSON.stringify(typeDefinitionResult.typeDefinitionJson, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

@@ -2,11 +2,17 @@ package com.hitorro.example.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hitorro.example.search.SearchResultIterator;
+import com.hitorro.example.service.EmbeddingService;
 import com.hitorro.index.IndexManager;
 import com.hitorro.index.config.IndexConfig;
+import com.hitorro.index.embeddings.EmbeddingConfig;
+import com.hitorro.index.embeddings.EmbeddingFieldType;
+import com.hitorro.index.embeddings.VectorSimilarity;
 import com.hitorro.index.indexer.JVSLuceneIndexWriter;
 import com.hitorro.index.query.JVSQueryParser;
+import com.hitorro.index.search.EmbeddingSearchRequest;
 import com.hitorro.index.search.FacetResult;
+import com.hitorro.index.search.HybridSearchRequest;
 import com.hitorro.index.search.JVSLuceneSearcher;
 import com.hitorro.index.search.SearchResult;
 import com.hitorro.index.stream.IndexerStream;
@@ -66,6 +72,9 @@ public class SearchController {
     @Qualifier("documentStore")
     private KVStore documentStore;
     
+    @Autowired(required = false)
+    private EmbeddingService embeddingService;
+    
     @PostConstruct
     public void initializeIndex() {
         try {
@@ -76,15 +85,35 @@ public class SearchController {
             indexPath = Paths.get(System.getProperty("java.io.tmpdir"), "hitorro-lucene-indexes");
             logger.info("Initializing Lucene indexes at: {}", indexPath);
             
+            // Check if embedding service is available and configure accordingly
+            EmbeddingConfig embeddingConfig = null;
+            if (embeddingService != null) {
+                int dimension = embeddingService.getDimension();
+                embeddingConfig = EmbeddingConfig.builder()
+                        .fieldName("_embedding")  // Field name for embeddings in JVS documents
+                        .dimension(dimension)
+                        .similarity(VectorSimilarity.COSINE)
+                        .fieldType(EmbeddingFieldType.FLOAT_VECTOR)
+                        .build();
+                logger.info("Embedding support enabled with dimension: {}", dimension);
+            } else {
+                logger.info("Embedding service not available - index created without embedding support");
+            }
+            
             // IndexConfig will automatically use FieldPatternAnalyzerWrapper
             // which selects analyzers based on field name suffixes (Solr-style)
             // Examples:
             //   *.text_en_s -> EnglishAnalyzer (with stemming, stop words)
             //   *.text_de_m -> GermanAnalyzer (with compound noun splitting, umlaut normalization)
             //   *.identifier_s -> KeywordAnalyzer (exact match, no tokenization)
-            IndexConfig config = IndexConfig.builder()
-                    .filesystem(indexPath.resolve(defaultIndexName))
-                    .build();
+            IndexConfig.Builder configBuilder = IndexConfig.builder()
+                    .filesystem(indexPath.resolve(defaultIndexName));
+            
+            if (embeddingConfig != null) {
+                configBuilder.embeddings(embeddingConfig);
+            }
+            
+            IndexConfig config = configBuilder.build();
             
             // Get default type for core_sysobject
             Type defaultType = JsonTypeSystem.getMe().getType("core_sysobject");
@@ -112,10 +141,11 @@ public class SearchController {
         }
     }
     
+    
     @PostMapping("/index")
     @Operation(
             summary = "Index a single document",
-            description = "Indexes a single JVS document into the Lucene index"
+            description = "Indexes a single JVS document into the Lucene index with optional embedding generation"
     )
     @ApiResponse(responseCode = "200", description = "Document indexed successfully")
     @ApiResponse(responseCode = "400", description = "Invalid document format")
@@ -123,17 +153,42 @@ public class SearchController {
     public ResponseEntity<Map<String, Object>> indexDocument(
             @Parameter(description = "Index name (defaults to 'default')")
             @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Generate embeddings if service available")
+            @RequestParam(defaultValue = "true") boolean generateEmbedding,
             @Parameter(description = "JVS document as JSON string")
             @RequestBody String jsonDocument) {
         try {
             JVS document = JVS.read(jsonDocument);
-            indexManager.indexDocument(indexName, document);
+            
+            // Generate embedding out-of-band
+            boolean embeddingAdded = false;
+            float[] embedding = null;
+            
+            if (generateEmbedding && embeddingService != null && embeddingService.isAvailable()) {
+                String text = embeddingService.extractTextForEmbedding(document);
+                logger.info("Extracted text for embedding: '{}'", text != null && text.length() > 100 ? text.substring(0, 100) + "..." : text);
+                
+                if (text != null && !text.isEmpty()) {
+                    embedding = embeddingService.generateEmbedding(text);
+                    logger.info("Generated embedding: dimension={}", embedding != null ? embedding.length : "null");
+                    embeddingAdded = (embedding != null);
+                }
+            }
+            
+            // Index with out-of-band embedding
+            IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
+            if (handle != null) {
+                handle.getWriter().indexDocument(document, embedding);
+            } else {
+                throw new IllegalArgumentException("Index '" + indexName + "' does not exist");
+            }
             indexManager.commit(indexName);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("message", "Document indexed successfully");
             response.put("indexName", indexName);
+            response.put("embeddingGenerated", embeddingAdded);
             
             // Get document ID if available
             try {
@@ -156,25 +211,56 @@ public class SearchController {
     @PostMapping("/index/batch")
     @Operation(
             summary = "Index multiple documents",
-            description = "Indexes a batch of JVS documents"
+            description = "Indexes a batch of JVS documents with optional embedding generation"
     )
     @ApiResponse(responseCode = "200", description = "Documents indexed successfully")
     public ResponseEntity<Map<String, Object>> indexBatch(
             @Parameter(description = "Index name (defaults to 'default')")
             @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Generate embeddings if service available")
+            @RequestParam(defaultValue = "true") boolean generateEmbedding,
             @Parameter(description = "Array of JVS documents")
             @RequestBody List<String> jsonDocuments) {
+        
+        logger.info("[batch] Received batch indexing request: indexName={}, generateEmbedding={}, documentCount={}, embeddingService={}, ollamaAvailable={}",
+                indexName, generateEmbedding, jsonDocuments.size(),
+                embeddingService != null ? "present" : "null",
+                embeddingService != null ? embeddingService.isAvailable() : "N/A");
+        
         try {
             List<JVS> documents = new ArrayList<>();
-            for (String jsonDoc : jsonDocuments) {
-                documents.add(JVS.read(jsonDoc));
+            int embeddingsGenerated = 0;
+            
+            IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
+            if (handle == null) {
+                throw new IllegalArgumentException("Index '" + indexName + "' does not exist");
             }
-            indexManager.indexDocuments(indexName, documents);
+            
+            for (String jsonDoc : jsonDocuments) {
+                JVS document = JVS.read(jsonDoc);
+                
+                // Generate embedding out-of-band
+                float[] embedding = null;
+                if (generateEmbedding && embeddingService != null && embeddingService.isAvailable()) {
+                    String text = embeddingService.extractTextForEmbedding(document);
+                    if (text != null && !text.isEmpty()) {
+                        embedding = embeddingService.generateEmbedding(text);
+                        if (embedding != null) {
+                            embeddingsGenerated++;
+                        }
+                    }
+                }
+                
+                // Index with out-of-band embedding
+                handle.getWriter().indexDocument(document, embedding);
+            }
+            
             indexManager.commit(indexName);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("indexed", documents.size());
+            response.put("embeddingsGenerated", embeddingsGenerated);
             response.put("indexName", indexName);
             
             return ResponseEntity.ok(response);
@@ -190,13 +276,15 @@ public class SearchController {
     @PostMapping("/index/withkv")
     @Operation(
             summary = "Index document to both Lucene and KV store",
-            description = "Indexes a document into Lucene index and stores full JSON in KV store with optional enrichment"
+            description = "Indexes a document into Lucene index and stores full JSON in KV store with optional enrichment and embedding generation"
     )
     @ApiResponse(responseCode = "200", description = "Document indexed and stored successfully")
     @ApiResponse(responseCode = "503", description = "KV store not available")
     public ResponseEntity<Map<String, Object>> indexWithKVStore(
             @Parameter(description = "Index name (defaults to 'default')")
             @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Generate embeddings if service available")
+            @RequestParam(defaultValue = "true") boolean generateEmbedding,
             @Parameter(description = "Enrich document before storing in KV store")
             @RequestParam(defaultValue = "false") boolean enrichBeforeStore,
             @Parameter(description = "JVS document as JSON string")
@@ -211,6 +299,47 @@ public class SearchController {
             
             JVS document = JVS.read(jsonDocument);
             
+            // Check if JVS has a valid type
+            if (document.getType() == null) {
+                logger.warn("Document has null type, enrichment may fail. JSON: {}", 
+                           jsonDocument.length() > 200 ? jsonDocument.substring(0, 200) + "..." : jsonDocument);
+            }
+            
+            // Generate and add embedding if service is available and enabled
+            boolean embeddingAdded = false;
+            logger.info("[withkv] Embedding generation requested: generateEmbedding={}, embeddingService={}, available={}",
+                    generateEmbedding, 
+                    embeddingService != null ? "present" : "null",
+                    embeddingService != null ? embeddingService.isAvailable() : "N/A");
+            
+            if (generateEmbedding && embeddingService != null && embeddingService.isAvailable()) {
+                String text = embeddingService.extractTextForEmbedding(document);
+                logger.info("[withkv] Extracted text for embedding: '{}'", text != null && text.length() > 100 ? text.substring(0, 100) + "..." : text);
+                
+                if (text != null && !text.isEmpty()) {
+                    float[] embedding = embeddingService.generateEmbedding(text);
+                    logger.info("[withkv] Generated embedding: dimension={}", embedding != null ? embedding.length : "null");
+                    
+                    if (embedding != null) {
+                        // Convert to List<Float> for JVS.set() compatibility
+                        java.util.List<Float> embeddingList = new java.util.ArrayList<>(embedding.length);
+                        for (float val : embedding) {
+                            embeddingList.add(val);
+                        }
+                        // Use JVS.set() API - adds embedding orthogonally, not in JSON
+                        document.set("_embedding", embeddingList);
+                        embeddingAdded = true;
+                        logger.info("[withkv] Successfully added embedding as List via JVS.set() with dimension {}", embeddingList.size());
+                    }
+                } else {
+                    logger.warn("[withkv] No text extracted from document for embedding generation");
+                }
+            } else {
+                if (!generateEmbedding) logger.info("[withkv] Embedding generation disabled by request parameter");
+                if (embeddingService == null) logger.warn("[withkv] EmbeddingService is null");
+                if (embeddingService != null && !embeddingService.isAvailable()) logger.warn("[withkv] Ollama is not available");
+            }
+            
             // Extract document ID
             Object docIdObj = document.get("id.did");
             String docId;
@@ -221,15 +350,17 @@ public class SearchController {
                 docId = UUID.randomUUID().toString();
             }
             
-            // Optionally enrich document before storing
+            // Optionally enrich document before storing - only if document has valid type
             JVS documentToStore = document;
-            if (enrichBeforeStore) {
+            if (enrichBeforeStore && document.getType() != null) {
                 logger.info("Enriching document before storing in KV store");
                 JVS2JVSEnrichMapper enrichMapper = new JVS2JVSEnrichMapper();
                 documentToStore = enrichMapper.apply(document);
                 if (documentToStore == null) {
                     documentToStore = document; // Fallback to original
                 }
+            } else if (enrichBeforeStore && document.getType() == null) {
+                logger.warn("Skipping enrichment for document without type. DocId: {}", docId);
             }
             
             // Store JSON in KV store (enriched or original)
@@ -254,6 +385,7 @@ public class SearchController {
             response.put("message", "Document indexed and stored");
             response.put("indexName", indexName);
             response.put("documentId", docId);
+            response.put("embeddingGenerated", embeddingAdded);
             response.put("storedInKV", true);
             response.put("indexedInLucene", true);
             
@@ -270,12 +402,14 @@ public class SearchController {
     @PostMapping("/index/batch/withkv")
     @Operation(
             summary = "Batch index to both Lucene and KV store",
-            description = "Indexes documents into Lucene and stores full JSON in KV store using batch operations with optional enrichment"
+            description = "Indexes documents into Lucene and stores full JSON in KV store using batch operations with optional enrichment and embedding generation"
     )
     @ApiResponse(responseCode = "200", description = "Documents indexed and stored successfully")
     public ResponseEntity<Map<String, Object>> batchIndexWithKVStore(
             @Parameter(description = "Index name (defaults to 'default')")
             @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Generate embeddings if service available")
+            @RequestParam(defaultValue = "true") boolean generateEmbedding,
             @Parameter(description = "Enrich documents before storing in KV store")
             @RequestParam(defaultValue = "false") boolean enrichBeforeStore,
             @Parameter(description = "Array of JVS documents")
@@ -289,8 +423,10 @@ public class SearchController {
             }
             
             List<JVS> documents = new ArrayList<>();
+            List<float[]> embeddings = new ArrayList<>();  // Store embeddings separately
             Map<byte[], byte[]> kvBatch = new HashMap<>();
             List<String> documentIds = new ArrayList<>();
+            int embeddingsGenerated = 0;
             
             // Create enrichment mapper if needed
             JVS2JVSEnrichMapper enrichMapper = enrichBeforeStore ? new JVS2JVSEnrichMapper() : null;
@@ -298,9 +434,45 @@ public class SearchController {
                 logger.info("Enriching {} documents before storing in KV store", jsonDocuments.size());
             }
             
+            IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
+            if (handle == null) {
+                throw new IllegalArgumentException("Index '" + indexName + "' does not exist");
+            }
+            
             for (String jsonDoc : jsonDocuments) {
                 JVS document = JVS.read(jsonDoc);
+                
+                // Check if JVS has a valid type - skip enrichment if not
+                if (document.getType() == null) {
+                    logger.warn("Document has null type, skipping enrichment. JSON: {}", 
+                               jsonDoc.length() > 200 ? jsonDoc.substring(0, 200) + "..." : jsonDoc);
+                }
+                
+                // Generate embedding OUT-OF-BAND (not in document JSON)
+                float[] embedding = null;
+                if (generateEmbedding && embeddingService != null && embeddingService.isAvailable()) {
+                    String text = embeddingService.extractTextForEmbedding(document);
+                    logger.info("[batch/withkv] Doc {} extracted text length: {}", 
+                               document.get("id.did"), text != null ? text.length() : "null");
+                    if (text != null && !text.isEmpty()) {
+                        embedding = embeddingService.generateEmbedding(text);
+                        logger.info("[batch/withkv] Doc {} generated embedding: dimension={}", 
+                                   document.get("id.did"), embedding != null ? embedding.length : "null");
+                        if (embedding != null) {
+                            embeddingsGenerated++;
+                        }
+                    } else {
+                        logger.warn("[batch/withkv] Doc {} - no text extracted for embedding", document.get("id.did"));
+                    }
+                } else {
+                    logger.debug("[batch/withkv] Doc {} - embedding generation skipped (enabled={}, service={}, available={})",
+                               document.get("id.did"), generateEmbedding, 
+                               embeddingService != null, 
+                               embeddingService != null ? embeddingService.isAvailable() : "N/A");
+                }
+                
                 documents.add(document);
+                embeddings.add(embedding);  // Store embedding separately (can be null)
                 
                 // Extract or generate document ID
                 Object docIdObj = document.get("id.did");
@@ -313,13 +485,15 @@ public class SearchController {
                 }
                 documentIds.add(docId);
                 
-                // Optionally enrich before storing
+                // Optionally enrich before storing - only if document has valid type
                 JVS documentToStore = document;
-                if (enrichBeforeStore && enrichMapper != null) {
+                if (enrichBeforeStore && enrichMapper != null && document.getType() != null) {
                     documentToStore = enrichMapper.apply(document);
                     if (documentToStore == null) {
                         documentToStore = document; // Fallback
                     }
+                } else if (enrichBeforeStore && document.getType() == null) {
+                    logger.warn("Skipping enrichment for document without type: {}", docId);
                 }
                 
                 // Prepare for batch KV store (enriched or original)
@@ -338,13 +512,16 @@ public class SearchController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
             }
             
-            // Batch index in Lucene
-            indexManager.indexDocuments(indexName, documents);
+            // Index in Lucene with out-of-band embeddings
+            for (int i = 0; i < documents.size(); i++) {
+                handle.getWriter().indexDocument(documents.get(i), embeddings.get(i));
+            }
             indexManager.commit(indexName);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("indexed", documents.size());
+            response.put("embeddingsGenerated", embeddingsGenerated);
             response.put("indexName", indexName);
             response.put("documentIds", documentIds);
             response.put("storedInKV", true);
@@ -883,10 +1060,26 @@ public class SearchController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
             }
             
-            // Create index config
-            IndexConfig config = IndexConfig.builder()
-                    .filesystem(indexPath.resolve(indexName))
-                    .build();
+            // Create index config with embedding support if available
+            IndexConfig.Builder configBuilder = IndexConfig.builder()
+                    .filesystem(indexPath.resolve(indexName));
+            
+            // Add embedding config if EmbeddingService is available
+            if (embeddingService != null && embeddingService.isAvailable()) {
+                int dimension = embeddingService.getDimension();
+                EmbeddingConfig embeddingConfig = EmbeddingConfig.builder()
+                        .fieldName("_embedding")
+                        .dimension(dimension)
+                        .similarity(VectorSimilarity.COSINE)
+                        .fieldType(EmbeddingFieldType.FLOAT_VECTOR)
+                        .build();
+                configBuilder.embeddings(embeddingConfig);
+                logger.info("Creating index {} with embedding support (dimension: {})", indexName, dimension);
+            } else {
+                logger.info("Creating index {} without embedding support", indexName);
+            }
+            
+            IndexConfig config = configBuilder.build();
             
             // Create the index
             indexManager.createIndex(indexName, config, type);
@@ -973,6 +1166,325 @@ public class SearchController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         } catch (Exception e) {
             logger.error("Error executing multi-index search", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    // ========== Embedding/Vector Search Operations ==========
+    
+    @PostMapping("/embedding")
+    @Operation(
+            summary = "Search by embedding vector (KNN/ANN)",
+            description = "Performs vector similarity search using embeddings. Supports both exact KNN and approximate ANN search via HNSW."
+    )
+    @ApiResponse(responseCode = "200", description = "Vector search completed successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid request or embedding not configured")
+    public ResponseEntity<Map<String, Object>> searchByEmbedding(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Request body with vector and search parameters")
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            // Extract parameters
+            @SuppressWarnings("unchecked")
+            List<Number> vectorList = (List<Number>) requestBody.get("vector");
+            if (vectorList == null || vectorList.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Vector parameter is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Convert to float array
+            float[] vector = new float[vectorList.size()];
+            for (int i = 0; i < vectorList.size(); i++) {
+                vector[i] = vectorList.get(i).floatValue();
+            }
+            
+            int k = requestBody.containsKey("k") ? ((Number) requestBody.get("k")).intValue() : 10;
+            
+            // Build request
+            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
+                    .queryVector(vector)
+                    .k(k)
+                    .build();
+            
+            // Execute search
+            SearchResult result = indexManager.searchByEmbedding(indexName, request);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("indexName", indexName);
+            response.put("totalHits", result.getTotalHits());
+            response.put("k", k);
+            response.put("vectorDimension", vector.length);
+            response.put("searchTimeMs", result.getSearchTimeMs());
+            
+            // Convert JVS documents to maps
+            List<Object> docs = new ArrayList<>();
+            for (JVS doc : result.getDocuments()) {
+                docs.add(doc.getJsonNode());
+            }
+            response.put("documents", docs);
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            logger.error("Embedding search not configured", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        } catch (Exception e) {
+            logger.error("Error executing embedding search", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @PostMapping("/semantic")
+    @Operation(
+            summary = "Semantic search using Ollama embeddings",
+            description = "Performs text, semantic, or hybrid search by automatically generating embeddings from query text using Ollama."
+    )
+    @ApiResponse(responseCode = "200", description = "Semantic search completed successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid request")
+    @ApiResponse(responseCode = "503", description = "Ollama not available or embeddings not enabled")
+    public ResponseEntity<Map<String, Object>> searchSemantic(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Request body with query text and search parameters")
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            // Check if embedding service is available
+            if (embeddingService == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "Embedding service not enabled. Set embedding.enabled=true in application.yml");
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+            }
+            
+            // Extract query text
+            String queryText = (String) requestBody.get("query");
+            if (queryText == null || queryText.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "query parameter is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Extract search mode: TEXT_ONLY, SEMANTIC_ONLY, or HYBRID (default)
+            String modeStr = requestBody.containsKey("mode") ? 
+                    (String) requestBody.get("mode") : "HYBRID";
+            
+            int k = requestBody.containsKey("k") ? 
+                    ((Number) requestBody.get("k")).intValue() : 10;
+            
+            // For hybrid search
+            String strategyStr = requestBody.containsKey("strategy") ? 
+                    (String) requestBody.get("strategy") : "RERANK_RRF";
+            double alpha = requestBody.containsKey("alpha") ? 
+                    ((Number) requestBody.get("alpha")).doubleValue() : 0.5;
+            
+            // Check Ollama availability for semantic modes
+            if (!modeStr.equals("TEXT_ONLY")) {
+                if (!embeddingService.isAvailable()) {
+                    Map<String, Object> error = new HashMap<>();
+                    error.put("status", "error");
+                    error.put("message", "Ollama is not available. Check that Ollama is running at the configured URL.");
+                    error.put("ollamaRequired", true);
+                    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+                }
+            }
+            
+            SearchResult result;
+            Map<String, Object> response = new HashMap<>();
+            
+            switch (modeStr) {
+                case "TEXT_ONLY":
+                    // Traditional text search only
+                    result = indexManager.search(indexName, queryText, 0, k, null);
+                    response.put("searchMode", "text");
+                    break;
+                    
+                case "SEMANTIC_ONLY":
+                    // Pure vector search
+                    float[] queryEmbedding = embeddingService.generateEmbedding(queryText);
+                    if (queryEmbedding == null) {
+                        Map<String, Object> error = new HashMap<>();
+                        error.put("status", "error");
+                        error.put("message", "Failed to generate embedding from query text");
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+                    }
+                    
+                    EmbeddingSearchRequest embeddingRequest = EmbeddingSearchRequest.builder()
+                            .queryVector(queryEmbedding)
+                            .k(k)
+                            .build();
+                    
+                    result = indexManager.searchByEmbedding(indexName, embeddingRequest);
+                    response.put("searchMode", "semantic");
+                    response.put("vectorDimension", queryEmbedding.length);
+                    break;
+                    
+                case "HYBRID":
+                default:
+                    // Hybrid: combine text and vector search
+                    float[] hybridEmbedding = embeddingService.generateEmbedding(queryText);
+                    if (hybridEmbedding == null) {
+                        Map<String, Object> error = new HashMap<>();
+                        error.put("status", "error");
+                        error.put("message", "Failed to generate embedding for hybrid search");
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+                    }
+                    
+                    HybridSearchRequest.CombinationStrategy strategy;
+                    try {
+                        strategy = HybridSearchRequest.CombinationStrategy.valueOf(strategyStr);
+                    } catch (IllegalArgumentException e) {
+                        strategy = HybridSearchRequest.CombinationStrategy.RERANK_RRF;
+                    }
+                    
+                    HybridSearchRequest hybridRequest = HybridSearchRequest.builder()
+                            .textQuery(queryText)
+                            .queryVector(hybridEmbedding)
+                            .k(k)
+                            .strategy(strategy)
+                            .alpha(alpha)
+                            .build();
+                    
+                    result = indexManager.searchHybrid(indexName, hybridRequest);
+                    response.put("searchMode", "hybrid");
+                    response.put("strategy", strategy.toString());
+                    response.put("alpha", alpha);
+                    response.put("vectorDimension", hybridEmbedding.length);
+                    break;
+            }
+            
+            // Build response
+            response.put("status", "success");
+            response.put("indexName", indexName);
+            response.put("query", queryText);
+            response.put("k", k);
+            response.put("totalHits", result.getTotalHits());
+            response.put("searchTimeMs", result.getSearchTimeMs());
+            
+            // Convert JVS documents to maps
+            List<Object> docs = new ArrayList<>();
+            for (JVS doc : result.getDocuments()) {
+                docs.add(doc.getJsonNode());
+            }
+            response.put("documents", docs);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalStateException e) {
+            logger.error("Semantic search not configured", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        } catch (Exception e) {
+            logger.error("Error executing semantic search", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @PostMapping("/hybrid")
+    @Operation(
+            summary = "Hybrid search combining text and vector search (with pre-computed embeddings)",
+            description = "Performs both traditional text search and vector similarity search using provided embeddings, then merges results using the specified strategy."
+    )
+    @ApiResponse(responseCode = "200", description = "Hybrid search completed successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid request or embedding not configured")
+    public ResponseEntity<Map<String, Object>> searchHybrid(
+            @Parameter(description = "Index name (defaults to 'default')")
+            @RequestParam(defaultValue = "default") String indexName,
+            @Parameter(description = "Request body with text query, vector, and merge strategy")
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            // Extract text query
+            String textQuery = (String) requestBody.get("textQuery");
+            if (textQuery == null || textQuery.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "textQuery parameter is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Extract vector
+            @SuppressWarnings("unchecked")
+            List<Number> vectorList = (List<Number>) requestBody.get("vector");
+            if (vectorList == null || vectorList.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("status", "error");
+                error.put("message", "vector parameter is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Convert to float array
+            float[] vector = new float[vectorList.size()];
+            for (int i = 0; i < vectorList.size(); i++) {
+                vector[i] = vectorList.get(i).floatValue();
+            }
+            
+            // Extract other parameters
+            int k = requestBody.containsKey("k") ? ((Number) requestBody.get("k")).intValue() : 10;
+            
+            String strategyStr = requestBody.containsKey("strategy") ? 
+                    (String) requestBody.get("strategy") : "RERANK_RRF";
+            HybridSearchRequest.CombinationStrategy strategy = 
+                    HybridSearchRequest.CombinationStrategy.valueOf(strategyStr);
+            
+            double alpha = requestBody.containsKey("alpha") ? 
+                    ((Number) requestBody.get("alpha")).doubleValue() : 0.5;
+            
+            // Build request
+            HybridSearchRequest request = HybridSearchRequest.builder()
+                    .textQuery(textQuery)
+                    .queryVector(vector)
+                    .k(k)
+                    .strategy(strategy)
+                    .alpha(alpha)
+                    .build();
+            
+            // Execute search
+            SearchResult result = indexManager.searchHybrid(indexName, request);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("indexName", indexName);
+            response.put("textQuery", textQuery);
+            response.put("strategy", strategy.toString());
+            response.put("alpha", alpha);
+            response.put("k", k);
+            response.put("vectorDimension", vector.length);
+            response.put("totalHits", result.getTotalHits());
+            response.put("searchTimeMs", result.getSearchTimeMs());
+            
+            // Convert JVS documents to maps
+            List<Object> docs = new ArrayList<>();
+            for (JVS doc : result.getDocuments()) {
+                docs.add(doc.getJsonNode());
+            }
+            response.put("documents", docs);
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            logger.error("Invalid hybrid search request", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        } catch (Exception e) {
+            logger.error("Error executing hybrid search", e);
             Map<String, Object> error = new HashMap<>();
             error.put("status", "error");
             error.put("message", e.getMessage());

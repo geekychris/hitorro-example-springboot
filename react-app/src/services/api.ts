@@ -15,6 +15,9 @@ import type {
   CommandExecuteRequest,
   CommandExecuteResponse,
   TypeDefinition,
+  OllamaStatus,
+  SemanticSearchRequest,
+  SemanticSearchResponse,
 } from '../types/api';
 
 const api = axios.create({
@@ -113,6 +116,18 @@ export const dmsApi = {
   
   deleteContainer: (id: number) =>
     api.delete(`/dms/containers/${id}`),
+  
+  // DMS to JVS Conversion
+  convertToJVS: (guid: string, includeContent: boolean = true, extractText: boolean = true) =>
+    api.get(`/dms/jvs/convert/${guid}`, {
+      params: { includeContent, extractText },
+    }),
+  
+  getJVSTypeDefinition: (guid: string) =>
+    api.get(`/dms/jvs/type-definition/${guid}`),
+  
+  convertBatchToJVS: (guids: string[], includeContent: boolean = true, extractText: boolean = true) =>
+    api.post('/dms/jvs/convert/batch', { guids, includeContent, extractText }),
 };
 
 // Crawler API
@@ -165,6 +180,23 @@ export const structuredLoggingApi = {
   
   logApiAccess: (userId: string) =>
     api.get('/demo/data', { params: { userId } }),
+};
+
+// Ollama Health API
+export const ollamaApi = {
+  getStatus: () =>
+    api.get<OllamaStatus>('/health/ollama'),
+  
+  resetFailures: () =>
+    api.post('/health/ollama/reset'),
+};
+
+// Semantic Search API
+export const searchApi = {
+  semantic: (request: SemanticSearchRequest, indexName: string = 'default') =>
+    api.post<SemanticSearchResponse>('/search/semantic', request, {
+      params: { indexName },
+    }),
 };
 
 export default api;

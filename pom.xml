@@ -26,12 +26,22 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <hitorro.version>3.0.0</hitorro.version>
-        <lucene.version>9.11.1</lucene.version>
+        <lucene.version>9.12.0</lucene.version>
+        <spring-ai.version>1.0.0-M4</spring-ai.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Force Lucene 9.11.1 across all dependencies -->
+            <!-- Spring AI BOM -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            
+            <!-- Force Lucene version across all dependencies -->
             <dependency>
                 <groupId>org.apache.lucene</groupId>
                 <artifactId>lucene-core</artifactId>
@@ -92,7 +102,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-basedms</artifactId>
-            <version>3.0.0</version>
+            <version>3.0.1</version>
             <exclusions>
                 <!-- Exclude Log4j 1.x - Spring Boot uses Logback -->
                 <exclusion>
@@ -304,11 +314,10 @@
             <version>2.3.0</version>
         </dependency>
 
-        <!-- Spring AI (Optional - for AI-powered transformers) -->
+        <!-- Spring AI Ollama (for embedding generation) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
-            <version>1.0.0-M4</version>
         </dependency>
 
         <!-- Kafka - for Structured Logging (optional, only if structured logging is enabled) -->

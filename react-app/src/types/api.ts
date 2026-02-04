@@ -186,3 +186,34 @@ export interface CommandExecuteResponse {
   error?: string;
   executionTimeMs: number;
 }
+
+// Ollama and Semantic Search Types
+export interface OllamaStatus {
+  available: boolean;
+  url: string;
+  failureCount: number;
+  message?: string;
+}
+
+export interface SemanticSearchRequest {
+  query: string;
+  mode: 'TEXT_ONLY' | 'SEMANTIC_ONLY' | 'HYBRID';
+  k?: number;
+  strategy?: 'RERANK_RRF' | 'WEIGHTED_SUM' | 'MAX_SCORE';
+  alpha?: number;  // For WEIGHTED_SUM strategy (0.0 = all text, 1.0 = all vector)
+}
+
+export interface SemanticSearchResponse {
+  status: string;
+  indexName: string;
+  query: string;
+  searchMode: string;
+  k: number;
+  totalHits: number;
+  searchTimeMs: number;
+  vectorDimension?: number;
+  strategy?: string;
+  alpha?: number;
+  documents: any[];
+  ollamaRequired?: boolean;
+}

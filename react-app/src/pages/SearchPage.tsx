@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Search, FileText, TrendingUp, Trash2, Database, BarChart3, Plus, Layers, HardDrive } from 'lucide-react';
+import { Search, FileText, TrendingUp, Trash2, Database, BarChart3, Plus, Layers, HardDrive, Sparkles } from 'lucide-react';
 import ReactJson from '@microlink/react-json-view';
 import axios from 'axios';
+import { OllamaStatus } from '../components/OllamaStatus';
+import { searchApi, type SemanticSearchRequest, type SemanticSearchResponse } from '../services/api';
 
 interface SearchResult {
   query: string;
@@ -34,6 +36,18 @@ export default function SearchPage() {
   const [enrichBeforeStore, setEnrichBeforeStore] = useState(false);
   const [fetchFromKV, setFetchFromKV] = useState(true);
   const [kvBatchSize, setKvBatchSize] = useState(50);
+  
+  // Embedding options
+  const [generateEmbedding, setGenerateEmbedding] = useState(true);
+  
+  // Semantic search options
+  const [semanticQuery, setSemanticQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'TEXT_ONLY' | 'SEMANTIC_ONLY' | 'HYBRID'>('HYBRID');
+  const [hybridStrategy, setHybridStrategy] = useState<'RERANK_RRF' | 'WEIGHTED_SUM' | 'MAX_SCORE'>('RERANK_RRF');
+  const [alpha, setAlpha] = useState(0.5);
+  const [semanticK, setSemanticK] = useState(10);
+  const [ollamaAvailable, setOllamaAvailable] = useState(false);
+  const [semanticResult, setSemanticResult] = useState<SemanticSearchResponse | null>(null);
   
   const [documentJson, setDocumentJson] = useState(`{
   "id": {
@@ -138,6 +152,8 @@ export default function SearchPage() {
     mutationFn: async (jsonDoc: string) => {
       const params = new URLSearchParams();
       params.append('indexName', selectedIndex);
+      params.append('generateEmbedding', generateEmbedding.toString());
+      console.log('Indexing with generateEmbedding:', generateEmbedding);
       const endpoint = (useKVStore && kvStoreStatus?.status === 'available') 
         ? '/api/search/index/withkv' 
         : '/api/search/index';
@@ -287,7 +303,7 @@ export default function SearchPage() {
       },
       {
         id: { domain: 'sysobject', did: 'doc003' },
-        type: 'article',
+        type: 'core_sysobject',
         dates: { created: '2024-01-17T12:00:00Z', modified: '2024-01-17T12:00:00Z' },
         title: { mls: [{ lang: 'en', text: 'Understanding Faceted Search' }] },
         description: {
@@ -304,6 +320,9 @@ export default function SearchPage() {
     try {
       const params = new URLSearchParams();
       params.append('indexName', selectedIndex);
+      if (generateEmbedding && ollamaAvailable) {
+        params.append('generateEmbedding', 'true');
+      }
       if (useKVStore && enrichBeforeStore) {
         params.append('enrichBeforeStore', 'true');
       }
@@ -505,6 +524,23 @@ export default function SearchPage() {
               }}
               placeholder="Enter JVS document JSON..."
             />
+            {/* Embedding Generation Option */}
+            <div style={{ marginTop: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  checked={generateEmbedding}
+                  onChange={(e) => setGenerateEmbedding(e.target.checked)}
+                  style={{ marginRight: '0.5rem' }}
+                  disabled={!ollamaAvailable}
+                />
+                <Sparkles size={16} style={{ marginRight: '0.25rem', color: ollamaAvailable ? '#8b5cf6' : '#6c757d' }} />
+                <span style={{ fontSize: '0.875rem', color: ollamaAvailable ? 'inherit' : '#6c757d' }}>
+                  Generate embeddings for semantic search {!ollamaAvailable && '(Ollama required)'}
+                </span>
+              </label>
+            </div>
+            
             {/* KV Store Indexing Option */}
             {kvStoreStatus?.status === 'available' && (
               <div style={{ marginTop: '0.5rem' }}>
@@ -544,7 +580,7 @@ export default function SearchPage() {
               {indexMutation.isPending ? 'Indexing...' : 
                 (useKVStore && kvStoreStatus?.status === 'available') ? 'Index to Lucene + KV Store' : 'Index Document'}
             </button>
-            {indexMutation.isSuccess && (
+            {indexMutation.isSuccess && indexMutation.data && (
               <div
                 className="alert"
                 style={{
@@ -553,9 +589,24 @@ export default function SearchPage() {
                   background: '#d4edda',
                   color: '#155724',
                   borderRadius: '0.25rem',
+                  fontSize: '0.875rem',
                 }}
               >
-                Document indexed successfully!
+                <div>✓ Document indexed successfully!</div>
+                {indexMutation.data.embeddingGenerated !== undefined && (
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                    {indexMutation.data.embeddingGenerated ? (
+                      <span style={{ color: '#8b5cf6' }}>
+                        <Sparkles size={12} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                        Embedding generated
+                      </span>
+                    ) : (
+                      <span style={{ color: '#6c757d' }}>
+                        No embedding generated
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {indexMutation.isError && (
@@ -796,6 +847,183 @@ export default function SearchPage() {
         )}
       </div>
 
+      {/* Semantic Search Section */}
+      <div className="card">
+        <h3 style={{ marginBottom: '1rem' }}>
+          <Sparkles size={18} style={{ display: 'inline', marginRight: '0.5rem' }} />
+          Semantic Search (Ollama)
+        </h3>
+
+        {/* Ollama Status */}
+        <div style={{ marginBottom: '1rem' }}>
+          <OllamaStatus onStatusChange={setOllamaAvailable} />
+        </div>
+
+        {!ollamaAvailable && (
+          <div style={{
+            padding: '1rem',
+            background: '#fef3c7',
+            border: '1px solid #fbbf24',
+            borderRadius: '0.375rem',
+            marginBottom: '1rem',
+            fontSize: '0.875rem',
+          }}>
+            <strong>Ollama not available.</strong> Semantic search requires Ollama to be running.
+            <div style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
+              Start Ollama: <code>ollama serve</code><br />
+              Pull model: <code>ollama pull nomic-embed-text</code>
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+            Search Query
+          </label>
+          <input
+            type="text"
+            className="input"
+            value={semanticQuery}
+            onChange={(e) => setSemanticQuery(e.target.value)}
+            placeholder="Enter your search query (e.g., documents about Apache Lucene)"
+            style={{ width: '100%' }}
+            disabled={!ollamaAvailable && searchMode !== 'TEXT_ONLY'}
+          />
+        </div>
+
+        <div className="grid grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+              Search Mode
+            </label>
+            <select
+              className="input"
+              value={searchMode}
+              onChange={(e) => setSearchMode(e.target.value as any)}
+              style={{ width: '100%' }}
+            >
+              <option value="TEXT_ONLY">Text Only (Traditional)</option>
+              <option value="SEMANTIC_ONLY" disabled={!ollamaAvailable}>
+                Semantic Only (Vector)
+              </option>
+              <option value="HYBRID" disabled={!ollamaAvailable}>
+                Hybrid (Text + Vector)
+              </option>
+            </select>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+              {searchMode === 'TEXT_ONLY' && 'Traditional keyword-based search'}
+              {searchMode === 'SEMANTIC_ONLY' && 'Pure vector similarity search using embeddings'}
+              {searchMode === 'HYBRID' && 'Combines traditional and semantic search'}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+              Max Results (k)
+            </label>
+            <input
+              type="number"
+              className="input"
+              value={semanticK}
+              onChange={(e) => setSemanticK(parseInt(e.target.value) || 10)}
+              min="1"
+              max="100"
+              style={{ width: '100%' }}
+            />
+          </div>
+        </div>
+
+        {/* Hybrid Strategy Options */}
+        {searchMode === 'HYBRID' && (
+          <div style={{
+            marginBottom: '1rem',
+            padding: '1rem',
+            background: 'var(--background)',
+            borderRadius: '0.375rem',
+            border: '1px solid #8b5cf6'
+          }}>
+            <h4 style={{ fontSize: '0.875rem', marginBottom: '0.75rem', fontWeight: 'bold' }}>
+              Hybrid Search Strategy
+            </h4>
+            
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                Combination Strategy
+              </label>
+              <select
+                className="input"
+                value={hybridStrategy}
+                onChange={(e) => setHybridStrategy(e.target.value as any)}
+                style={{ width: '100%' }}
+              >
+                <option value="RERANK_RRF">Reciprocal Rank Fusion (RRF)</option>
+                <option value="WEIGHTED_SUM">Weighted Sum</option>
+                <option value="MAX_SCORE">Max Score</option>
+              </select>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                {hybridStrategy === 'RERANK_RRF' && 'Combines rankings using reciprocal rank fusion (recommended)'}
+                {hybridStrategy === 'WEIGHTED_SUM' && 'Weighted combination of text and vector scores'}
+                {hybridStrategy === 'MAX_SCORE' && 'Takes maximum score from either search method'}
+              </div>
+            </div>
+
+            {hybridStrategy === 'WEIGHTED_SUM' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                  Alpha (Text ← → Vector): {alpha.toFixed(2)}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={alpha}
+                  onChange={(e) => setAlpha(parseFloat(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  marginTop: '0.25rem'
+                }}>
+                  <span>All Text (0.0)</span>
+                  <span>Balanced (0.5)</span>
+                  <span>All Vector (1.0)</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          className="button button-primary"
+          onClick={async () => {
+            try {
+              const request: SemanticSearchRequest = {
+                query: semanticQuery,
+                mode: searchMode,
+                k: semanticK,
+                strategy: hybridStrategy,
+                alpha: alpha,
+              };
+              const response = await searchApi.semantic(request, selectedIndex);
+              setSemanticResult(response.data);
+            } catch (error: any) {
+              alert(`Search failed: ${error.response?.data?.message || error.message}`);
+            }
+          }}
+          disabled={!semanticQuery.trim() || (!ollamaAvailable && searchMode !== 'TEXT_ONLY')}
+          style={{ width: '100%' }}
+        >
+          <Sparkles size={16} />
+          {searchMode === 'TEXT_ONLY' ? 'Search (Text)' : 
+           searchMode === 'SEMANTIC_ONLY' ? 'Search (Semantic)' :
+           'Search (Hybrid)'}
+        </button>
+      </div>
+
       {/* Search Results */}
       {searchResult && (
         <div className="card">
@@ -881,6 +1109,84 @@ export default function SearchPage() {
                     borderRadius: '0.375rem',
                   }}
                 >
+                  <ReactJson
+                    src={doc}
+                    theme="rjv-default"
+                    collapsed={1}
+                    displayDataTypes={false}
+                    displayObjectSize={false}
+                    enableClipboard={true}
+                    name={null}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Semantic Search Results */}
+      {semanticResult && (
+        <div className="card">
+          <h3 style={{ marginBottom: '1rem' }}>
+            <Sparkles size={18} style={{ display: 'inline', marginRight: '0.5rem' }} />
+            Semantic Search Results
+          </h3>
+
+          <div
+            style={{
+              padding: '0.75rem',
+              background: 'var(--background)',
+              borderRadius: '0.375rem',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Query: <code>{semanticResult.query}</code>
+            </div>
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+              Mode: <strong>{semanticResult.searchMode}</strong>
+              {semanticResult.vectorDimension && (
+                <span> • Vector Dimension: {semanticResult.vectorDimension}</span>
+              )}
+              {semanticResult.strategy && (
+                <span> • Strategy: {semanticResult.strategy}</span>
+              )}
+              {semanticResult.searchTimeMs && (
+                <span> • Time: {semanticResult.searchTimeMs}ms</span>
+              )}
+            </div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', marginTop: '0.25rem' }}>
+              {semanticResult.totalHits} document(s) found
+            </div>
+          </div>
+
+          {/* Documents */}
+          <h4 style={{ marginBottom: '0.5rem' }}>Documents</h4>
+          {semanticResult.documents.length === 0 ? (
+            <div style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
+              No documents found
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {semanticResult.documents.map((doc, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '1rem',
+                    background: 'var(--background)',
+                    borderRadius: '0.375rem',
+                    border: '2px solid #8b5cf6',
+                  }}
+                >
+                  <div style={{ 
+                    fontSize: '0.75rem', 
+                    color: '#8b5cf6', 
+                    marginBottom: '0.5rem',
+                    fontWeight: 'bold'
+                  }}>
+                    Result #{idx + 1}
+                  </div>
                   <ReactJson
                     src={doc}
                     theme="rjv-default"

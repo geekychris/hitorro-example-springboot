@@ -48,6 +48,17 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
         globally_quoted_identifiers: true
         format_sql: true  # Pretty-print SQL
+  
+  # Spring AI Ollama Configuration
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        options:
+          model: nomic-embed-text
+      chat:
+        options:
+          model: llama2  # For potential future chat features
 
 # Swagger/OpenAPI Configuration
 springdoc:
@@ -181,7 +192,7 @@ hitorro:
   # Test Framework Configuration
   test:
     enabled: false  # Enable TestServerService
-    run-on-startup: true  # Disable automatic test execution on server startup
+    run-on-startup: false  # Disable automatic test execution on server startup
   
   # Structured Logging Configuration
   # Metadata-driven structured logging with Kafka integration
@@ -206,6 +217,14 @@ hitorro:
     writeBufferSize: 67108864  # 64MB write buffer
     maxOpenFiles: 1000  # Maximum open file descriptors
 
+# Embedding Configuration
+embedding:
+  enabled: true  # Set to true to enable embedding-based search (requires Ollama)
+  fields: title,description  # Comma-separated list of fields to extract for embeddings (MLS structures are automatically handled)
+  field-separator: ". "  # Separator when combining fields
+  auto-detect-dimension: true  # Auto-detect dimension from Ollama model
+  dimension: 768  # Fallback dimension if auto-detect fails (nomic-embed-text uses 768)
+
 # Logging
 logging:
   level:
@@ -213,3 +232,4 @@ logging:
     com.hitorro: DEBUG
     com.hitorro.spring: INFO
     org.hibernate: WARN
+    org.springframework.ai: DEBUG
