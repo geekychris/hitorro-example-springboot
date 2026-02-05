@@ -86,15 +86,17 @@ export default function DMSPageEnhanced() {
     enabled: !!selectedDocument && (selectedDocument.contentCount || 0) > 0,
   });
 
+  type ContainerNode = ContainerInfo & { children: ContainerNode[] };
+
   // Build hierarchical container structure
   // Supports many-to-many relationships (folders can have multiple parents)
   const buildContainerTree = (containers: ContainerInfo[]) => {
-    const map = new Map<number, ContainerInfo & { children: ContainerInfo[] }>();
-    const roots: (ContainerInfo & { children: ContainerInfo[] })[] = [];
+    const map = new Map<number, ContainerNode>();
+    const roots: ContainerNode[] = [];
 
     // Initialize all containers with children array
     containers.forEach(c => {
-      map.set(c.id, { ...c, children: [] });
+      map.set(c.id, { ...c, children: [] as ContainerNode[] });
     });
 
     // Build tree structure using parentContainerIds array
@@ -154,7 +156,7 @@ export default function DMSPageEnhanced() {
   };
 
   const renderContainerNode = (
-    container: ContainerInfo & { children: ContainerInfo[] },
+    container: ContainerNode,
     level: number = 0
   ) => {
     const isExpanded = expandedContainers.has(container.id);
@@ -1397,11 +1399,7 @@ export default function DMSPageEnhanced() {
                         border: '2px solid var(--border)',
                         borderRadius: '8px',
                         cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        ':hover': {
-                          borderColor: 'var(--primary)',
-                          background: 'var(--surface)'
-                        }
+                        transition: 'all 0.2s'
                       }}
                       onClick={async () => {
                         if (!confirm(`Transform ${selectedContent.originalFileName || 'content'} to ${trans.targetMimeType}${selectedTemplateGuid ? ' using selected template' : ''}?`)) {

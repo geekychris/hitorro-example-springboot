@@ -64,6 +64,7 @@ export interface CreateDocumentRequest {
   creator?: string;
   realm?: string;
   categories?: CategoryInfo[];
+  containerIds?: number[];
 }
 
 export interface UpdateDocumentRequest {

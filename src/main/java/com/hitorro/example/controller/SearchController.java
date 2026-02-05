@@ -140,6 +140,21 @@ public class SearchController {
             logger.error("Error closing indexes", e);
         }
     }
+
+    /**
+     * Expose the IndexManager so diagnostics/controllers (e.g. lucene viewer) can
+     * reuse the same writers/searchers without fighting for Lucene write locks.
+     */
+    public IndexManager getIndexManager() {
+        return indexManager;
+    }
+
+    /**
+     * Base filesystem path where this example app creates/manages its indexes.
+     */
+    public Path getIndexBasePath() {
+        return indexPath;
+    }
     
     
     @PostMapping("/index")

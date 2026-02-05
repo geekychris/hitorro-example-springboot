@@ -9,6 +9,7 @@ import RestExplorerPage from './pages/RestExplorerPage';
 import ServicesExplorerPage from './pages/ServicesExplorerPage';
 import StructuredLoggingPage from './pages/StructuredLoggingPage';
 import SearchPage from './pages/SearchPage';
+import LuceneViewerPage from './pages/LuceneViewerPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,7 +20,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services' | 'logging' | 'search';
+type TabId = 'dms' | 'crawler' | 'types' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer';
 
 interface Tab {
   id: TabId;
@@ -32,6 +33,7 @@ const tabs: Tab[] = [
   { id: 'crawler', label: 'Filesystem Crawler', description: 'Import files and directories into DMS' },
   { id: 'types', label: 'Type System', description: 'JSON Type System enrichment and field exploration' },
   { id: 'search', label: 'Search', description: 'Lucene-based document search and indexing with facets' },
+  { id: 'luceneviewer', label: 'Lucene Viewer', description: 'Luke-like index browser (fields, stored docs, terms, search)' },
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },
   { id: 'rest', label: 'REST API Explorer', description: 'Discover and test REST endpoints with streaming support' },
   { id: 'services', label: 'Services', description: 'Explore Hitorro services and dependency hierarchy' },
@@ -51,6 +53,8 @@ function App() {
         return <TypeSystemPage />;
       case 'search':
         return <SearchPage />;
+      case 'luceneviewer':
+        return <LuceneViewerPage />;
       case 'commands':
         return <CommandsPage />;
       case 'rest':

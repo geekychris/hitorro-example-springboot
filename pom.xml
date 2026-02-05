@@ -98,6 +98,13 @@
             </exclusions>
         </dependency>
 
+        <!-- Lucene viewer diagnostics (Luke-like tooling) -->
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-luceneviewer</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
         <!-- Hitorro DMS (required for DMS features) -->
         <dependency>
             <groupId>com.hitorro</groupId>

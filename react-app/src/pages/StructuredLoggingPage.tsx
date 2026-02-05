@@ -319,7 +319,7 @@ export default function StructuredLoggingPage() {
               id="statusCode"
               type="number"
               value={formData.statusCode}
-              onChange={(e) => setFormData({ ...formData, statusCode: Number(e.target.value) || null })}
+              onChange={(e) => setFormData({ ...formData, statusCode: e.target.value })}
               placeholder="e.g., 200, 404, 500"
               className="input"
             />
