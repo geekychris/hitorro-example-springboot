@@ -596,14 +596,17 @@ public class SearchController {
             @Parameter(description = "Maximum number of results to return")
             @RequestParam(defaultValue = "10") int maxResults,
             
+            @Parameter(description = "Query language (ISO 639-1, defaults to 'en')")
+            @RequestParam(defaultValue = "en") String lang,
+            
             @Parameter(description = "Comma-separated list of facet fields")
             @RequestParam(required = false) String facets) {
         try {
             List<String> facetList = facets != null && !facets.isEmpty()
                     ? Arrays.asList(facets.split(","))
                     : null;
-            
-            SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList);
+
+            SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList, lang);
             
             Map<String, Object> response = new HashMap<>();
             response.put("query", query);
@@ -661,6 +664,9 @@ public class SearchController {
             @Parameter(description = "Maximum number of results to return")
             @RequestParam(defaultValue = "10") int maxResults,
             
+            @Parameter(description = "Query language (ISO 639-1, defaults to 'en')")
+            @RequestParam(defaultValue = "en") String lang,
+            
             @Parameter(description = "Fetch full documents from KV store")
             @RequestParam(defaultValue = "true") boolean fetchFromKV,
             
@@ -681,7 +687,7 @@ public class SearchController {
                     ? Arrays.asList(facets.split(","))
                     : null;
             
-            SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList);
+            SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList, lang);
             
             Map<String, Object> response = new HashMap<>();
             response.put("query", query);
@@ -770,6 +776,9 @@ public class SearchController {
             @Parameter(description = "Maximum number of results")
             @RequestParam(defaultValue = "10") int maxResults,
             
+            @Parameter(description = "Query language (ISO 639-1, defaults to 'en')")
+            @RequestParam(defaultValue = "en") String lang,
+            
             @Parameter(description = "Comma-separated list of facet fields")
             @RequestParam(required = false) String facets) {
         
@@ -779,7 +788,7 @@ public class SearchController {
                         ? Arrays.asList(facets.split(","))
                         : null;
                 
-                SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList);
+                SearchResult result = indexManager.search(indexName, query, 0, maxResults, facetList, lang);
                 String ndjson = SearchResponseStream.toNDJsonString(result);
                 
                 outputStream.write(ndjson.getBytes());
@@ -868,10 +877,13 @@ public class SearchController {
     @ApiResponse(responseCode = "200", description = "Statistics retrieved")
     public ResponseEntity<Map<String, Object>> getStats(
             @Parameter(description = "Index name (defaults to 'default')")
-            @RequestParam(defaultValue = "default") String indexName) {
+            @RequestParam(defaultValue = "default") String indexName,
+            
+            @Parameter(description = "Query language (ISO 639-1, defaults to 'en')")
+            @RequestParam(defaultValue = "en") String lang) {
         try {
             // Use a simple query to get document count
-            SearchResult countResult = indexManager.search(indexName, "*:*", 0, 1, null);
+            SearchResult countResult = indexManager.search(indexName, "*:*", 0, 1, null, lang);
             
             Map<String, Object> stats = new HashMap<>();
             stats.put("indexName", indexName);
@@ -1139,11 +1151,14 @@ public class SearchController {
             @Parameter(description = "Lucene query string")
             @RequestParam String query,
             @Parameter(description = "Maximum number of results to return")
-            @RequestParam(defaultValue = "10") int maxResults) {
+            @RequestParam(defaultValue = "10") int maxResults,
+            
+            @Parameter(description = "Query language (ISO 639-1, defaults to 'en')")
+            @RequestParam(defaultValue = "en") String lang) {
         try {
             List<String> indexList = Arrays.asList(indexes.split(","));
             
-            SearchResult result = indexManager.searchMultiple(indexList, query, 0, maxResults);
+            SearchResult result = indexManager.searchMultiple(indexList, query, 0, maxResults, lang);
             
             Map<String, Object> response = new HashMap<>();
             response.put("query", query);
@@ -1257,6 +1272,10 @@ public class SearchController {
     public ResponseEntity<Map<String, Object>> searchSemantic(
             @Parameter(description = "Index name (defaults to 'default')")
             @RequestParam(defaultValue = "default") String indexName,
+            
+            @Parameter(description = "Query language (ISO 639-1, defaults to 'en')")
+            @RequestParam(defaultValue = "en") String lang,
+            
             @Parameter(description = "Request body with query text and search parameters")
             @RequestBody Map<String, Object> requestBody) {
         try {
@@ -1307,7 +1326,7 @@ public class SearchController {
             switch (modeStr) {
                 case "TEXT_ONLY":
                     // Traditional text search only
-                    result = indexManager.search(indexName, queryText, 0, k, null);
+                    result = indexManager.search(indexName, queryText, 0, k, null, lang);
                     response.put("searchMode", "text");
                     break;
                     

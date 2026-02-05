@@ -206,9 +206,9 @@ export const ollamaApi = {
 
 // Semantic Search API
 export const searchApi = {
-  semantic: (request: SemanticSearchRequest, indexName: string = 'default') =>
+  semantic: (request: SemanticSearchRequest, indexName: string = 'default', lang: string = 'en') =>
     api.post<SemanticSearchResponse>('/search/semantic', request, {
-      params: { indexName },
+      params: { indexName, lang },
     }),
 };
 

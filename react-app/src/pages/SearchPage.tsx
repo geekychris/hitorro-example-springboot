@@ -28,6 +28,7 @@ export default function SearchPage() {
   const [multiIndexNames, setMultiIndexNames] = useState<string[]>([]);
   const [query, setQuery] = useState('*:*');
   const [maxResults, setMaxResults] = useState(10);
+  const [searchLang, setSearchLang] = useState('en');
   const [facetFields, setFacetFields] = useState<string[]>([]);
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   
@@ -52,18 +53,18 @@ export default function SearchPage() {
   const [documentJson, setDocumentJson] = useState(`{
   "id": {
     "domain": "sysobject",
-    "did": "doc001"
+    "did": "doc-ner-001"
   },
   "type": "core_sysobject",
   "dates": {
-    "created": "2024-01-15T10:30:00Z",
-    "modified": "2024-01-15T10:30:00Z"
+    "created": "2025-03-03T09:00:00Z",
+    "modified": "2025-03-03T09:00:00Z"
   },
   "title": {
     "mls": [
       {
         "lang": "en",
-        "text": "Introduction to Apache Lucene"
+        "text": "Meeting Notes: John Smith in New York"
       }
     ]
   },
@@ -71,7 +72,7 @@ export default function SearchPage() {
     "mls": [
       {
         "lang": "en",
-        "text": "Apache Lucene is a high-performance, full-featured text search engine library written in Java."
+        "text": "On March 3, 2025 at 9:00 AM, John Smith met with Jane Doe at the Hilton Midtown hotel in New York City to discuss a $2,500,000 licensing deal for the Hitorro platform. Later that afternoon at 3:30 PM, they visited the office on 5th Avenue to finalize pricing details and scheduled a follow-up in San Francisco for April 10 at 2:15 PM."
       }
     ]
   }
@@ -185,6 +186,7 @@ export default function SearchPage() {
       const params = new URLSearchParams();
       params.append('query', query);
       params.append('maxResults', maxResults.toString());
+      params.append('lang', searchLang);
       if (facets.length > 0) {
         params.append('facets', facets.join(','));
       }
@@ -274,43 +276,43 @@ export default function SearchPage() {
       : '/api/search/index/batch';
     const samples = [
       {
-        id: { domain: 'sysobject', did: 'doc001' },
+        id: { domain: 'sysobject', did: 'doc-ner-001' },
         type: 'core_sysobject',
-        dates: { created: '2024-01-15T10:00:00Z', modified: '2024-01-15T10:00:00Z' },
-        title: { mls: [{ lang: 'en', text: 'Introduction to Apache Lucene' }] },
+        dates: { created: '2025-03-03T09:00:00Z', modified: '2025-03-03T09:00:00Z' },
+        title: { mls: [{ lang: 'en', text: 'Meeting Notes: John Smith in New York' }] },
         description: {
           mls: [
             {
               lang: 'en',
-              text: 'Apache Lucene is a high-performance text search engine library.',
+              text: 'On March 3, 2025 at 9:00 AM, John Smith met with Jane Doe at the Hilton Midtown hotel in New York City to discuss a $2,500,000 licensing deal for the Hitorro platform.',
             },
           ],
         },
       },
       {
-        id: { domain: 'sysobject', did: 'doc002' },
+        id: { domain: 'sysobject', did: 'doc-ner-002' },
         type: 'core_sysobject',
-        dates: { created: '2024-01-16T11:00:00Z', modified: '2024-01-16T11:00:00Z' },
-        title: { mls: [{ lang: 'en', text: 'Full-Text Search with Lucene' }] },
+        dates: { created: '2025-03-04T14:15:00Z', modified: '2025-03-04T14:15:00Z' },
+        title: { mls: [{ lang: 'en', text: 'Project Kickoff in San Francisco' }] },
         description: {
           mls: [
             {
               lang: 'en',
-              text: 'Learn how to implement full-text search capabilities using Lucene.',
+              text: 'On March 4, 2025 at 2:15 PM, Alice Johnson and Bob Lee met at the Moscone Center in San Francisco to review a $750,000 pilot project for a new Lucene-based search service.',
             },
           ],
         },
       },
       {
-        id: { domain: 'sysobject', did: 'doc003' },
+        id: { domain: 'sysobject', did: 'doc-ner-003' },
         type: 'core_sysobject',
-        dates: { created: '2024-01-17T12:00:00Z', modified: '2024-01-17T12:00:00Z' },
-        title: { mls: [{ lang: 'en', text: 'Understanding Faceted Search' }] },
+        dates: { created: '2025-03-05T16:45:00Z', modified: '2025-03-05T16:45:00Z' },
+        title: { mls: [{ lang: 'en', text: 'European Customer Visit' }] },
         description: {
           mls: [
             {
               lang: 'en',
-              text: 'Faceted search allows users to navigate search results by applying multiple filters.',
+              text: 'On March 5, 2025 at 4:45 PM, Maria Garcia met clients from Berlin at a café near Brandenburg Gate to negotiate a €120,000 annual support contract.',
             },
           ],
         },
@@ -734,6 +736,26 @@ export default function SearchPage() {
           />
         </div>
 
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+            Language
+          </label>
+          <select
+            className="input"
+            value={searchLang}
+            onChange={(e) => setSearchLang(e.target.value)}
+            style={{ width: '100%' }}
+          >
+            <option value="en">English (en)</option>
+            <option value="de">German (de)</option>
+            <option value="fr">French (fr)</option>
+            <option value="es">Spanish (es)</option>
+          </select>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+            Controls which language-specific analyzer is used for i18n text fields.
+          </div>
+        </div>
+
         <div className="grid grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
@@ -1001,14 +1023,14 @@ export default function SearchPage() {
           className="button button-primary"
           onClick={async () => {
             try {
-              const request: SemanticSearchRequest = {
+          const request: SemanticSearchRequest = {
                 query: semanticQuery,
                 mode: searchMode,
                 k: semanticK,
                 strategy: hybridStrategy,
                 alpha: alpha,
               };
-              const response = await searchApi.semantic(request, selectedIndex);
+              const response = await searchApi.semantic(request, selectedIndex, searchLang);
               setSemanticResult(response.data);
             } catch (error: any) {
               alert(`Search failed: ${error.response?.data?.message || error.message}`);
