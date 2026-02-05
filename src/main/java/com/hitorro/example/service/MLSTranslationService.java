@@ -23,8 +23,6 @@ package com.hitorro.example.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hitorro.basedms.transformer.ai.AIService;
 import com.hitorro.basedms.transformer.ai.AIServiceRegistry;
 import com.hitorro.jsontypesystem.JVS;
@@ -96,16 +94,12 @@ public class MLSTranslationService {
         result.setSourceLanguage(sourceLanguage);
         result.setTargetLanguages(targetLanguages);
         
-        // Deep copy the JSON node so we can modify it
-        JsonNode originalNode = jvs.getJsonNode();
-        ObjectNode translatedNode = originalNode.deepCopy();
-        
         List<FieldTranslation> fieldTranslations = new ArrayList<>();
         
         for (String fieldPath : mlsFieldPaths) {
             try {
                 FieldTranslation fieldTranslation = translateField(
-                    translatedNode, fieldPath, sourceLanguage, targetLanguages, aiService
+                    jvs, fieldPath, sourceLanguage, targetLanguages, aiService
                 );
                 if (fieldTranslation != null) {
                     fieldTranslations.add(fieldTranslation);
@@ -119,7 +113,7 @@ public class MLSTranslationService {
             }
         }
         
-        result.setTranslatedJson(translatedNode);
+        result.setTranslatedJson(jvs.getJsonNode());
         result.setFieldTranslations(fieldTranslations);
         result.setSuccess(fieldTranslations.stream().noneMatch(f -> f.getError() != null));
         
@@ -127,24 +121,21 @@ public class MLSTranslationService {
     }
     
     /**
-     * Translate a single MLS field
+     * Translate a single MLS field using JVS's built-in MLS accessors
      */
-    private FieldTranslation translateField(ObjectNode rootNode, String fieldPath,
+    private FieldTranslation translateField(JVS jvs, String fieldPath,
                                             String sourceLanguage, List<String> targetLanguages,
                                             AIService aiService) {
         
-        // Navigate to the field
-        JsonNode fieldNode = navigateToField(rootNode, fieldPath);
-        if (fieldNode == null || fieldNode.isNull()) {
-            logger.warn("Field '{}' not found or null", fieldPath);
-            return null;
+        // Use JVS's MLS accessor: fieldPath.mls[lang].clean or .text
+        String mlsPath = fieldPath + ".mls[" + sourceLanguage + "]";
+        
+        // Try to get clean text first, fall back to text
+        String sourceText = jvs.getString(mlsPath + ".clean");
+        if (sourceText == null || sourceText.trim().isEmpty()) {
+            sourceText = jvs.getString(mlsPath + ".text");
         }
         
-        // Get or create the MLS node
-        JsonNode mlsNode = fieldNode.has("mls") ? fieldNode.get("mls") : fieldNode;
-        
-        // Extract source text
-        String sourceText = extractSourceText(mlsNode, sourceLanguage);
         if (sourceText == null || sourceText.trim().isEmpty()) {
             logger.warn("No source text found for field '{}' in language '{}'", fieldPath, sourceLanguage);
             return null;
@@ -170,8 +161,8 @@ public class MLSTranslationService {
                 String translatedText = aiService.translate(sourceText, sourceLanguage, targetLang);
                 translations.put(targetLang, translatedText);
                 
-                // Add to MLS structure
-                addTranslationToMLS(rootNode, fieldPath, targetLang, translatedText);
+                // Set translation using JVS's MLS accessor
+                jvs.set(fieldPath + ".mls[" + targetLang + "].text", translatedText);
                 
             } catch (Exception e) {
                 logger.error("Failed to translate to {}: {}", targetLang, e.getMessage());
@@ -181,167 +172,6 @@ public class MLSTranslationService {
         
         fieldTranslation.setTranslations(translations);
         return fieldTranslation;
-    }
-    
-    /**
-     * Navigate to a field in the JSON tree using dot-notation path
-     */
-    private JsonNode navigateToField(JsonNode root, String fieldPath) {
-        String[] parts = fieldPath.split("\\.");
-        JsonNode current = root;
-        
-        for (String part : parts) {
-            if (current == null || !current.has(part)) {
-                return null;
-            }
-            current = current.get(part);
-        }
-        
-        return current;
-    }
-    
-    /**
-     * Navigate to parent and get field name for modification
-     */
-    private ObjectNode navigateToParent(ObjectNode root, String fieldPath) {
-        String[] parts = fieldPath.split("\\.");
-        ObjectNode current = root;
-        
-        for (int i = 0; i < parts.length - 1; i++) {
-            JsonNode next = current.get(parts[i]);
-            if (next == null || !next.isObject()) {
-                return null;
-            }
-            current = (ObjectNode) next;
-        }
-        
-        return current;
-    }
-    
-    /**
-     * Extract the source text from an MLS structure
-     */
-    private String extractSourceText(JsonNode mlsNode, String sourceLanguage) {
-        if (mlsNode == null) {
-            return null;
-        }
-        
-        // Handle array format: {"mls": [{"lang": "en", "text": "..."}]}
-        if (mlsNode.isArray()) {
-            for (JsonNode item : mlsNode) {
-                if (item.isObject()) {
-                    JsonNode langNode = item.get("lang");
-                    if (langNode != null && sourceLanguage.equalsIgnoreCase(langNode.asText())) {
-                        // Prefer "clean" over "text"
-                        if (item.has("clean") && !item.get("clean").asText().isEmpty()) {
-                            return item.get("clean").asText();
-                        }
-                        if (item.has("text")) {
-                            return item.get("text").asText();
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Handle object format: {"mls": {"text": "...", "clean": "..."}}
-        if (mlsNode.isObject()) {
-            // If it has "mls" child, recurse
-            if (mlsNode.has("mls")) {
-                return extractSourceText(mlsNode.get("mls"), sourceLanguage);
-            }
-            // Direct object with text
-            if (mlsNode.has("clean") && !mlsNode.get("clean").asText().isEmpty()) {
-                return mlsNode.get("clean").asText();
-            }
-            if (mlsNode.has("text")) {
-                return mlsNode.get("text").asText();
-            }
-        }
-        
-        // Handle simple string
-        if (mlsNode.isTextual()) {
-            return mlsNode.asText();
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Add a translation to the MLS structure
-     */
-    private void addTranslationToMLS(ObjectNode rootNode, String fieldPath, 
-                                      String targetLang, String translatedText) {
-        
-        String[] parts = fieldPath.split("\\.");
-        ObjectNode parent = rootNode;
-        
-        // Navigate to parent of the field
-        for (int i = 0; i < parts.length - 1; i++) {
-            JsonNode next = parent.get(parts[i]);
-            if (next == null || !next.isObject()) {
-                return;
-            }
-            parent = (ObjectNode) next;
-        }
-        
-        String fieldName = parts[parts.length - 1];
-        JsonNode fieldNode = parent.get(fieldName);
-        
-        if (fieldNode == null || fieldNode.isNull()) {
-            return;
-        }
-        
-        // Get or create the MLS structure
-        ObjectNode fieldObjectNode;
-        ArrayNode mlsArray;
-        
-        if (fieldNode.isObject()) {
-            fieldObjectNode = (ObjectNode) fieldNode;
-            
-            if (fieldObjectNode.has("mls")) {
-                JsonNode mlsNode = fieldObjectNode.get("mls");
-                if (mlsNode.isArray()) {
-                    mlsArray = (ArrayNode) mlsNode;
-                } else {
-                    // Convert object MLS to array format
-                    mlsArray = objectMapper.createArrayNode();
-                    fieldObjectNode.set("mls", mlsArray);
-                }
-            } else {
-                // Create mls array
-                mlsArray = objectMapper.createArrayNode();
-                fieldObjectNode.set("mls", mlsArray);
-            }
-        } else {
-            // Field is not an object, wrap it
-            fieldObjectNode = objectMapper.createObjectNode();
-            mlsArray = objectMapper.createArrayNode();
-            fieldObjectNode.set("mls", mlsArray);
-            parent.set(fieldName, fieldObjectNode);
-        }
-        
-        // Check if translation for this language already exists
-        boolean found = false;
-        for (JsonNode item : mlsArray) {
-            if (item.isObject()) {
-                JsonNode langNode = item.get("lang");
-                if (langNode != null && targetLang.equalsIgnoreCase(langNode.asText())) {
-                    // Update existing
-                    ((ObjectNode) item).put("text", translatedText);
-                    found = true;
-                    break;
-                }
-            }
-        }
-        
-        // Add new translation entry if not found
-        if (!found) {
-            ObjectNode newEntry = objectMapper.createObjectNode();
-            newEntry.put("lang", targetLang);
-            newEntry.put("text", translatedText);
-            mlsArray.add(newEntry);
-        }
     }
     
     /**

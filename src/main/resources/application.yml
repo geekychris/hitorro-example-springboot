@@ -197,8 +197,8 @@ hitorro:
   
   # Test Framework Configuration
   test:
-    enabled: false  # Enable TestServerService
-    run-on-startup: false  # Disable automatic test execution on server startup
+    enabled: true  # Enable TestServerService
+    run-on-startup: true  # Disable automatic test execution on server startup
   
   # Structured Logging Configuration
   # Metadata-driven structured logging with Kafka integration
