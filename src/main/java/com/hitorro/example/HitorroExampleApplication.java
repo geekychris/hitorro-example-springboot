@@ -25,6 +25,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 /**
  * Example Spring Boot application demonstrating Hitorro integration.
  * 
@@ -55,34 +62,122 @@ public class HitorroExampleApplication {
     /**
      * Configure required Hitorro system properties before Spring initialization.
      * Must be called before SpringApplication.run().
+     * 
+     * Resolution order (highest to lowest priority):
+     * 1. System property (-DHT_BIN=path, -DHT_HOME=path)
+     * 2. Environment variable (HT_BIN, HT_HOME)
+     * 3. Default: parent directory of the application location
      */
     private static void configureHitorroSystemProperties() {
-        if (System.getProperty("HT_BIN") == null) {
-            String htBin = System.getenv("HT_BIN");
-            if (htBin == null) {
-                // Default to project directory if not set
-                htBin = "/Users/chris/hitorro";
-                System.err.println("WARNING: HT_BIN not configured. Using default: " + htBin);
-                System.err.println("Set via: -DHT_BIN=/path or export HT_BIN=/path");
+        Path defaultHitorroPath = getDefaultHitorroPath();
+        configureHtBin(defaultHitorroPath);
+        configureHtHome(defaultHitorroPath);
+    }
+    
+    /**
+     * Determine the default Hitorro directory path based on application location.
+     * 
+     * For development (classes in target/classes): uses parent of project directory
+     * For JAR deployment: uses parent of JAR directory
+     * Fallback: uses parent of current working directory
+     */
+    private static Path getDefaultHitorroPath() {
+        try {
+            // Get the location of this class
+            URL classLocation = HitorroExampleApplication.class.getProtectionDomain()
+                    .getCodeSource().getLocation();
+            Path classPath = Paths.get(classLocation.toURI());
+            
+            // classPath is either:
+            // - target/classes (development)
+            // - path/to/app.jar (packaged)
+            Path appParentDir;
+            if (classPath.toString().endsWith(".jar")) {
+                // Running from JAR: go up two levels (jar -> jar-dir -> parent)
+                appParentDir = classPath.getParent().getParent();
+            } else {
+                // Running from classes (development): go up from target/classes to project's parent
+                // target/classes -> target -> project -> project-parent
+                appParentDir = classPath.getParent().getParent().getParent();
             }
-            System.setProperty("HT_BIN", htBin);
-            System.out.println("HT_BIN configured: " + htBin);
-        } else {
-            System.out.println("HT_BIN already set: " + System.getProperty("HT_BIN"));
+            
+            System.out.println("[HITORRO] Default Hitorro directory: " + appParentDir);
+            return appParentDir;
+            
+        } catch (URISyntaxException | NullPointerException | SecurityException e) {
+            // Fallback to parent of current working directory
+            System.err.println("[HITORRO] WARNING: Could not determine application location: " + e.getMessage());
+            Path fallback = Paths.get(System.getProperty("user.dir")).getParent();
+            System.err.println("[HITORRO]   Falling back to: " + fallback);
+            return fallback;
+        }
+    }
+    
+    private static void configureHtBin(Path defaultPath) {
+        if (System.getProperty("HT_BIN") != null) {
+            System.out.println("[HITORRO] HT_BIN set via system property: " + System.getProperty("HT_BIN"));
+            return;
         }
         
-        if (System.getProperty("HT_HOME") == null) {
-            String htHome = System.getenv("HT_HOME");
-            if (htHome == null) {
-                // Default to home directory if not set
-                htHome = "/Users/chris/hthome";
-                System.err.println("WARNING: HT_HOME not configured. Using default: " + htHome);
-                System.err.println("Set via: -DHT_HOME=/path or export HT_HOME=/path");
-            }
+        String htBin = System.getenv("HT_BIN");
+        if (htBin != null) {
+            System.setProperty("HT_BIN", htBin);
+            System.out.println("[HITORRO] HT_BIN set via environment: " + htBin);
+            return;
+        }
+        
+        // Use default path relative to application location
+        String resolvedPath = toCanonicalPath(defaultPath);
+        System.setProperty("HT_BIN", resolvedPath);
+        System.err.println("[HITORRO] WARNING: HT_BIN not configured, using default: " + resolvedPath);
+        System.err.println("[HITORRO]   Override via: -DHT_BIN=/path or export HT_BIN=/path");
+        
+        // Validate the default path has expected structure
+        File configDir = new File(resolvedPath, "config");
+        if (!configDir.exists() || !configDir.isDirectory()) {
+            System.err.println("[HITORRO] WARNING: Expected 'config' directory not found at: " + configDir.getAbsolutePath());
+            System.err.println("[HITORRO]   The application may fail to start. Please configure HT_BIN correctly.");
+        }
+    }
+    
+    private static void configureHtHome(Path defaultPath) {
+        if (System.getProperty("HT_HOME") != null) {
+            System.out.println("[HITORRO] HT_HOME set via system property: " + System.getProperty("HT_HOME"));
+            return;
+        }
+        
+        String htHome = System.getenv("HT_HOME");
+        if (htHome != null) {
             System.setProperty("HT_HOME", htHome);
-            System.out.println("HT_HOME configured: " + htHome);
-        } else {
-            System.out.println("HT_HOME already set: " + System.getProperty("HT_HOME"));
+            System.out.println("[HITORRO] HT_HOME set via environment: " + htHome);
+            return;
+        }
+        
+        // Use default path relative to application location
+        String resolvedPath = toCanonicalPath(defaultPath);
+        System.setProperty("HT_HOME", resolvedPath);
+        System.err.println("[HITORRO] WARNING: HT_HOME not configured, using default: " + resolvedPath);
+        System.err.println("[HITORRO]   Override via: -DHT_HOME=/path or export HT_HOME=/path");
+        
+        // Create the directory if it doesn't exist
+        File htHomeDir = new File(resolvedPath);
+        if (!htHomeDir.exists()) {
+            if (htHomeDir.mkdirs()) {
+                System.out.println("[HITORRO] Created HT_HOME directory: " + resolvedPath);
+            } else {
+                System.err.println("[HITORRO] WARNING: Failed to create HT_HOME directory: " + resolvedPath);
+            }
+        }
+    }
+    
+    /**
+     * Convert a Path to canonical string form.
+     */
+    private static String toCanonicalPath(Path path) {
+        try {
+            return path.toFile().getCanonicalPath();
+        } catch (IOException e) {
+            return path.toAbsolutePath().toString();
         }
     }
 }
