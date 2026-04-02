@@ -212,4 +212,26 @@ export const searchApi = {
     }),
 };
 
+// Data Mapper API
+export const dataMapperApi = {
+  listScripts: () =>
+    api.get<Array<{ name: string; content: string }>>('/datamapper/scripts'),
+
+  saveScript: (name: string, body: { content: string }) =>
+    api.put(`/datamapper/scripts/${name}`, body),
+
+  execute: (request: { script: string; inputData: string; outputCount: number }) =>
+    api.post<{
+      results: any[];
+      inputCount: number;
+      outputCount: number;
+      elapsedMs: number;
+      error?: string;
+      errors?: string[];
+    }>('/datamapper/execute', request),
+
+  validate: (body: { script: string }) =>
+    api.post<{ valid: boolean; error?: string }>('/datamapper/validate', body),
+};
+
 export default api;
