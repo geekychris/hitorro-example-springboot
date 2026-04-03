@@ -92,12 +92,11 @@ public class DataMapperController {
 
             List<ScriptInfo> scripts = new ArrayList<>();
             for (File f : files) {
-                ScriptInfo info = new ScriptInfo();
-                info.name = f.getName().replace(".groovy", "");
-                info.content = new String(Files.readAllBytes(f.toPath()));
-                scripts.add(info);
+                scripts.add(new ScriptInfo(
+                        f.getName().replace(".groovy", ""),
+                        new String(Files.readAllBytes(f.toPath()))));
             }
-            scripts.sort(Comparator.comparing(s -> s.name));
+            scripts.sort(Comparator.comparing(ScriptInfo::name));
             return ResponseEntity.ok(scripts);
         } catch (Exception e) {
             logger.error("Error listing scripts", e);
@@ -240,13 +239,7 @@ public class DataMapperController {
 
     // --- DTOs ---
 
-    public static class ScriptInfo {
-        public String name;
-        public String content;
-
-        public String getName() { return name; }
-        public String getContent() { return content; }
-    }
+    public record ScriptInfo(String name, String content) {}
 
     public static class SaveScriptRequest {
         public String content;
