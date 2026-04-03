@@ -4,9 +4,9 @@ import { Play, Save, FileCode, RefreshCw, AlertTriangle, Check, Copy, Download, 
 import ReactJson from '@microlink/react-json-view';
 import { dataMapperApi } from '../services/api';
 
-const DEFAULT_INPUT = `{"id":{"domain":"test","did":"doc1"},"title":{"mls":[{"text":"Introduction to Search","lang":"en"}]},"tags":["search","intro"]}
-{"id":{"domain":"test","did":"doc2"},"title":{"mls":[{"text":"Machine Learning Basics","lang":"en"}]},"tags":["ml","ai"]}
-{"id":{"domain":"test","did":"doc3"},"title":{"mls":[{"text":"Natural Language Processing","lang":"en"}]},"tags":["nlp","text"]}`;
+const DEFAULT_INPUT = `{"id":{"domain":"test","did":"doc1"},"title":{"mls":[{"text":"Introduction to Search","lang":"en"}]},"body":{"mls":[{"text":"Search engines are fundamental to modern computing. They index vast amounts of data and provide ranked results using algorithms like BM25 and vector similarity.","lang":"en"}]},"tags":["search","intro"]}
+{"id":{"domain":"test","did":"doc2"},"title":{"mls":[{"text":"Machine Learning Basics","lang":"en"}]},"body":{"mls":[{"text":"Machine learning algorithms learn patterns from data to make predictions. Common approaches include supervised learning, unsupervised learning, and reinforcement learning.","lang":"en"}]},"tags":["ml","ai"]}
+{"id":{"domain":"test","did":"doc3"},"title":{"mls":[{"text":"Natural Language Processing","lang":"en"}]},"body":{"mls":[{"text":"NLP bridges the gap between human language and computers. Key tasks include tokenization, named entity recognition, sentiment analysis, and machine translation.","lang":"en"}]},"tags":["nlp","text"]}`;
 
 export default function DataMapperPage() {
   const [script, setScript] = useState('');

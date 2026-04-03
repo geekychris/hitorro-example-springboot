@@ -25,9 +25,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.hitorro.basedms.transformer.ai.AIService;
+import com.hitorro.basedms.transformer.ai.AIServiceRegistry;
 import com.hitorro.jsontypesystem.JVS;
+import com.hitorro.jsontypesystem.datamapper.AIOperations;
 import com.hitorro.jsontypesystem.datamapper.DataGenerators;
+import com.hitorro.jsontypesystem.datamapper.EnrichOperations;
 import com.hitorro.jsontypesystem.datamapper.GroovyTransformMapper;
+import com.hitorro.obj.core.solr.JVS2JVSEnrichMapper;
 import com.hitorro.util.core.Env;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -49,6 +54,19 @@ public class DataMapperController {
 
     private static final Logger logger = LoggerFactory.getLogger(DataMapperController.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    private AIOperations getAIOperations() {
+        AIService aiService = AIServiceRegistry.getInstance();
+        if (aiService == null || !aiService.isAvailable()) {
+            return null;
+        }
+        return new AIOperations() {
+            public String translate(String text, String src, String tgt) { return aiService.translate(text, src, tgt); }
+            public String summarize(String text, int maxWords) { return aiService.summarize(text, maxWords); }
+            public String ask(String text, String question) { return aiService.answerQuestion(text, question); }
+            public boolean isAvailable() { return aiService.isAvailable(); }
+        };
+    }
 
     private File getTransformsDir() {
         return new File(Env.getBin(), "config/transforms");
@@ -118,9 +136,19 @@ public class DataMapperController {
         long startTime = System.currentTimeMillis();
 
         try {
-            // Parse script
+            // Parse script with optional AI and enrich operations
             File genDir = getGeneratorsDir();
             GroovyTransformMapper mapper = GroovyTransformMapper.fromString(request.script, genDir);
+            AIOperations ai = getAIOperations();
+            if (ai != null) {
+                mapper.withAI(ai);
+            }
+            mapper.withEnrich((jvs, tags) -> {
+                JVS2JVSEnrichMapper enrichMapper = (tags != null && tags.length > 0)
+                        ? new JVS2JVSEnrichMapper(tags) : new JVS2JVSEnrichMapper();
+                JVS result = enrichMapper.apply(jvs);
+                return result != null ? result : jvs;
+            });
 
             // Parse input documents (JSON array or NDJSON)
             List<JVS> inputs = parseInputDocs(request.inputData);

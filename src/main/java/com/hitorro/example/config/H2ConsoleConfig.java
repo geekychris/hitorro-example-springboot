@@ -42,7 +42,6 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 @EnableWebSecurity
-@ConditionalOnProperty(name = "spring.h2.console.enabled", havingValue = "true")
 public class H2ConsoleConfig {
 
     @Bean
@@ -51,7 +50,9 @@ public class H2ConsoleConfig {
             // Allow all requests (no authentication required)
             // For production, you'd want to secure specific endpoints
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/h2-console/**", "/api/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                .requestMatchers("/h2-console/**", "/api/**", "/actuator/**",
+                        "/swagger-ui/**", "/v3/api-docs/**",
+                        "/", "/index.html", "/assets/**", "/*.js", "/*.css").permitAll()
                 .anyRequest().permitAll()
             )
             // Disable CSRF for H2 console and API
