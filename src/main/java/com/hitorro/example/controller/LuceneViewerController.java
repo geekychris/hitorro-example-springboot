@@ -43,6 +43,49 @@ public class LuceneViewerController {
     @Qualifier("documentStore")
     private KVStore documentStore;
 
+    @GetMapping("/browse")
+    @Operation(summary = "Browse directories", description = "Lists directories and Lucene index directories for file chooser navigation")
+    public ResponseEntity<?> browse(
+            @RequestParam(defaultValue = "") String path) {
+        try {
+            java.io.File dir;
+            if (path.isEmpty()) {
+                // Default to HT_HOME or user home
+                dir = com.hitorro.util.core.Env.getHome();
+            } else {
+                dir = new java.io.File(path);
+            }
+            if (!dir.exists() || !dir.isDirectory()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Not a valid directory: " + path));
+            }
+
+            List<Map<String, Object>> entries = new ArrayList<>();
+            // Add parent
+            if (dir.getParentFile() != null) {
+                entries.add(Map.of("name", "..", "path", dir.getParentFile().getAbsolutePath(),
+                        "type", "directory", "isIndex", false));
+            }
+
+            java.io.File[] files = dir.listFiles();
+            if (files != null) {
+                java.util.Arrays.sort(files, Comparator.comparing(java.io.File::getName));
+                for (java.io.File f : files) {
+                    if (f.isDirectory() && !f.getName().startsWith(".")) {
+                        // Check if this directory contains a Lucene index (has segments file)
+                        boolean isIndex = new java.io.File(f, "segments_1").exists()
+                                || java.util.Arrays.stream(f.listFiles() != null ? f.listFiles() : new java.io.File[0])
+                                    .anyMatch(c -> c.getName().startsWith("segments"));
+                        entries.add(Map.of("name", f.getName(), "path", f.getAbsolutePath(),
+                                "type", "directory", "isIndex", isIndex));
+                    }
+                }
+            }
+            return ResponseEntity.ok(Map.of("currentPath", dir.getAbsolutePath(), "entries", entries));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/stats")
     @Operation(summary = "Index stats", description = "Returns basic index stats (maxDoc/numDocs/deletions)")
     public ResponseEntity<?> stats(
@@ -134,6 +177,17 @@ public class LuceneViewerController {
             @RequestParam(required = false) String kvKeyFieldCandidates) {
         try {
             try (IndexAccess access = openIndex(indexName, indexPath, false)) {
+                if (access.reader.maxDoc() == 0) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Index is empty (0 documents)",
+                        "maxDoc", 0));
+                }
+                if (docId < 0 || docId >= access.reader.maxDoc()) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                        "error", "docId out of range",
+                        "docId", docId,
+                        "maxDoc", access.reader.maxDoc()));
+                }
                 LuceneStoredDocument stored = LuceneViewer.getStoredDocument(access.reader, docId);
 
                 Map<String, Object> response = new HashMap<>();

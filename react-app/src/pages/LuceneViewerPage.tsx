@@ -113,6 +113,92 @@ function buildTermQuery(field: string, term: string): string {
   return `${field}:${escapeLuceneTerm(term)}`;
 }
 
+interface BrowseEntry {
+  name: string;
+  path: string;
+  type: string;
+  isIndex: boolean;
+}
+
+function DirectoryBrowser({ onSelect, selectedPath }: { onSelect: (path: string) => void; selectedPath: string }) {
+  const [browsePath, setBrowsePath] = useState('');
+  const [manualPath, setManualPath] = useState(selectedPath);
+  const [showBrowser, setShowBrowser] = useState(false);
+
+  const browseQuery = useQuery({
+    queryKey: ['lucene-browse', browsePath],
+    queryFn: async () => {
+      const { data } = await axios.get('/api/luceneviewer/browse', { params: { path: browsePath } });
+      return data as { currentPath: string; entries: BrowseEntry[] };
+    },
+    enabled: showBrowser,
+  });
+
+  return (
+    <div style={{ marginTop: '0.75rem' }}>
+      <label className="label">External Index Path</label>
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <input
+          className="input"
+          style={{ flex: 1 }}
+          placeholder="/path/to/lucene/index"
+          value={manualPath}
+          onChange={(e) => { setManualPath(e.target.value); onSelect(e.target.value); }}
+        />
+        <button
+          className="btn btn-secondary"
+          style={{ whiteSpace: 'nowrap' }}
+          onClick={() => { setShowBrowser(!showBrowser); if (!showBrowser && !browsePath) setBrowsePath(''); }}
+        >
+          {showBrowser ? 'Close' : 'Browse...'}
+        </button>
+      </div>
+      {showBrowser && (
+        <div style={{
+          marginTop: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem',
+          maxHeight: '300px', overflow: 'auto', background: 'var(--background)', padding: '0.5rem'
+        }}>
+          {browseQuery.isLoading && <div style={{ color: 'var(--text-secondary)' }}>Loading...</div>}
+          {browseQuery.error && <div style={{ color: 'var(--error-color)' }}>Error loading directory</div>}
+          {browseQuery.data && (
+            <>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontFamily: 'monospace' }}>
+                {browseQuery.data.currentPath}
+              </div>
+              {browseQuery.data.entries.map((entry) => (
+                <div
+                  key={entry.path}
+                  onClick={() => {
+                    if (entry.isIndex) {
+                      setManualPath(entry.path);
+                      onSelect(entry.path);
+                      setShowBrowser(false);
+                    } else {
+                      setBrowsePath(entry.path);
+                    }
+                  }}
+                  style={{
+                    padding: '0.35rem 0.5rem', cursor: 'pointer', borderRadius: '0.25rem',
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    background: entry.isIndex ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                    fontWeight: entry.isIndex ? 'bold' : 'normal',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = entry.isIndex ? 'rgba(59, 130, 246, 0.2)' : 'var(--hover-background)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = entry.isIndex ? 'rgba(59, 130, 246, 0.1)' : 'transparent')}
+                >
+                  {entry.isIndex ? <Database size={14} /> : <Layers size={14} />}
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{entry.name}</span>
+                  {entry.isIndex && <span style={{ fontSize: '0.7rem', color: 'var(--primary-color)' }}>(index)</span>}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LuceneViewerPage() {
   const [indexMode, setIndexMode] = useState<IndexMode>('managed');
   const [managedIndexName, setManagedIndexName] = useState('default');
@@ -377,15 +463,7 @@ export default function LuceneViewerPage() {
                 </div>
               </div>
             ) : (
-              <div style={{ marginTop: '0.75rem' }}>
-                <label className="label">External Index Path</label>
-                <input
-                  className="input"
-                  placeholder="/path/to/lucene/index"
-                  value={externalIndexPath}
-                  onChange={(e) => setExternalIndexPath(e.target.value)}
-                />
-              </div>
+              <DirectoryBrowser onSelect={(path) => setExternalIndexPath(path)} selectedPath={externalIndexPath} />
             )}
           </div>
 

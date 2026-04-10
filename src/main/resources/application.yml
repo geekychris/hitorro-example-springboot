@@ -108,7 +108,7 @@ hitorro:
     load:
       - com.hitorro.basedms.db.HibernateService  # Hibernate service (handles entity registration including Folder)
       - com.hitorro.base.objects.BaseDMSService  # Load BaseDMSService via service framework
-      - com.hitorro.util.testframework.TestServerService  # Load TestServerService (required by unittime)
+      - com.hitorro.util.testframework.TestServerService  # Test framework
       - com.hitorro.basedms.transformer.TransformerService  # Transformer service for content renditions
   
   # Hitorro-specific properties (will be converted to JVSProperties)
@@ -198,7 +198,7 @@ hitorro:
   # Test Framework Configuration
   test:
     enabled: true  # Enable TestServerService
-    run-on-startup: true  # Disable automatic test execution on server startup
+    run-on-startup: false  # Disable automatic test execution on server startup
   
   # Structured Logging Configuration
   # Metadata-driven structured logging with Kafka integration
