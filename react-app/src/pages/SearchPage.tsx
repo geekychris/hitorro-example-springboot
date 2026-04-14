@@ -35,10 +35,14 @@ export default function SearchPage() {
   
   // KV Store options
   const [useKVStore, setUseKVStore] = useState(true);
-  const [enrichBeforeStore, setEnrichBeforeStore] = useState(false);
+  const [enrichBeforeStore, setEnrichBeforeStore] = useState(true);
   const [fetchFromKV, setFetchFromKV] = useState(true);
   const [kvBatchSize, setKvBatchSize] = useState(50);
-  
+
+  // Enrichment & Translation options
+  const [enrichTags, setEnrichTags] = useState<string[]>(['basic', 'segmented', 'ner']);
+  const [targetLangs, setTargetLangs] = useState<string[]>([]);
+
   // Embedding options
   const [generateEmbedding, setGenerateEmbedding] = useState(true);
   
@@ -51,21 +55,20 @@ export default function SearchPage() {
   const [ollamaAvailable, setOllamaAvailable] = useState(false);
   const [semanticResult, setSemanticResult] = useState<SemanticSearchResponse | null>(null);
   
+  // Document dataset - loaded docs ready for indexing
+  const [pendingDocs, setPendingDocs] = useState<any[]>([]);
+
   const [documentJson, setDocumentJson] = useState(`{
   "id": {
     "domain": "sysobject",
-    "did": "doc-ner-001"
+    "did": "doc-custom-001"
   },
   "type": "core_sysobject",
-  "dates": {
-    "created": "2025-03-03T09:00:00Z",
-    "modified": "2025-03-03T09:00:00Z"
-  },
   "title": {
     "mls": [
       {
         "lang": "en",
-        "text": "Meeting Notes: John Smith in New York"
+        "text": "Custom document title"
       }
     ]
   },
@@ -73,7 +76,7 @@ export default function SearchPage() {
     "mls": [
       {
         "lang": "en",
-        "text": "On March 3, 2025 at 9:00 AM, John Smith met with Jane Doe at the Hilton Midtown hotel in New York City to discuss a $2,500,000 licensing deal for the Hitorro platform. Later that afternoon at 3:30 PM, they visited the office on 5th Avenue to finalize pricing details and scheduled a follow-up in San Francisco for April 10 at 2:15 PM."
+        "text": "Custom document description text."
       }
     ]
   }
@@ -149,27 +152,43 @@ export default function SearchPage() {
     },
   });
 
-  // Index document mutation (with optional KV store and enrichment)
+  // Index all pending docs through the translate → enrich → index + KV pipeline
   const indexMutation = useMutation({
-    mutationFn: async (jsonDoc: string) => {
+    mutationFn: async (docs: any[]) => {
+      const kvAvail = kvStoreStatus?.status === 'available';
+      const endpoint = kvAvail ? '/api/search/index/batch/withkv' : '/api/search/index/batch';
       const params = new URLSearchParams();
       params.append('indexName', selectedIndex);
-      params.append('generateEmbedding', generateEmbedding.toString());
-      console.log('Indexing with generateEmbedding:', generateEmbedding);
-      const endpoint = (useKVStore && kvStoreStatus?.status === 'available') 
-        ? '/api/search/index/withkv' 
-        : '/api/search/index';
-      if (useKVStore && enrichBeforeStore) {
+      params.append('generateEmbedding', (generateEmbedding && ollamaAvailable).toString());
+      if (enrichTags.length > 0) {
         params.append('enrichBeforeStore', 'true');
+        params.append('enrichTags', enrichTags.join(','));
       }
-      const response = await axios.post(endpoint, jsonDoc, {
-        headers: { 'Content-Type': 'application/json' },
+      if (targetLangs.length > 0) {
+        params.append('targetLangs', targetLangs.join(','));
+      }
+      setIndexingStatus(
+        `Processing ${docs.length} documents` +
+        (targetLangs.length > 0 ? ` (translating to ${targetLangs.join(', ')})` : '') +
+        (enrichTags.length > 0 ? ` (enriching: ${enrichTags.join(', ')})` : '') +
+        '... this may take a while'
+      );
+      const response = await axios.post(endpoint, docs.map((d) => JSON.stringify(d)), {
         params,
+        timeout: 600000,
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       refetchStats();
+      let msg = `Indexed ${data.indexed} documents.`;
+      if (data.translated) msg += ` Translated ${data.translated} to ${data.targetLangs}.`;
+      if (data.enriched) msg += ' Enriched.';
+      if (data.storedInKV) msg += ' Stored in KV.';
+      setIndexingStatus(msg);
+    },
+    onError: (e) => {
+      setIndexingStatus('Error: ' + (e as any)?.response?.data?.message || (e as Error).message);
     },
   });
 
@@ -192,23 +211,20 @@ export default function SearchPage() {
         params.append('facets', facets.join(','));
       }
 
-      // KV store enrichment parameters
-      if (fetchFromKV && kvStoreStatus?.status === 'available') {
-        params.append('fetchFromKV', 'true');
-        params.append('batchSize', kvBatchSize.toString());
-      }
-
       // Multi-index search if multiple selected
       if (multiIndexNames.length > 1) {
         params.append('indexes', multiIndexNames.join(','));
         const response = await axios.get<SearchResult>('/api/search/query/multi', { params });
         return response.data;
       } else {
-        // Single index search - use KV endpoint if KV enrichment enabled
         params.append('indexName', selectedIndex);
-        const endpoint = (fetchFromKV && kvStoreStatus?.status === 'available') 
-          ? '/api/search/query/withkv' 
-          : '/api/search/query';
+        // Use KV endpoint when available for full translated+enriched docs
+        const useKV = kvStoreStatus?.status === 'available';
+        if (useKV) {
+          params.append('fetchFromKV', fetchFromKV.toString());
+          params.append('batchSize', kvBatchSize.toString());
+        }
+        const endpoint = useKV ? '/api/search/query/withkv' : '/api/search/query';
         const response = await axios.get<SearchResult>(endpoint, { params });
         return response.data;
       }
@@ -240,15 +256,6 @@ export default function SearchPage() {
     createIndexMutation.mutate({ name: newIndexName.trim(), typeName: newIndexType });
   };
 
-  const handleIndexDocument = () => {
-    try {
-      JSON.parse(documentJson); // Validate JSON
-      indexMutation.mutate(documentJson);
-    } catch (e) {
-      alert('Invalid JSON: ' + (e as Error).message);
-    }
-  };
-
   const handleSearch = () => {
     searchMutation.mutate({ query, maxResults, facets: facetFields });
   };
@@ -271,73 +278,42 @@ export default function SearchPage() {
     );
   };
 
-  const loadSampleDocuments = async () => {
-    const endpoint = (useKVStore && kvStoreStatus?.status === 'available') 
-      ? '/api/search/index/batch/withkv' 
-      : '/api/search/index/batch';
-    const samples = [
-      {
-        id: { domain: 'sysobject', did: 'doc-ner-001' },
-        type: 'core_sysobject',
-        dates: { created: '2025-03-03T09:00:00Z', modified: '2025-03-03T09:00:00Z' },
-        title: { mls: [{ lang: 'en', text: 'Meeting Notes: John Smith in New York' }] },
-        description: {
-          mls: [
-            {
-              lang: 'en',
-              text: 'On March 3, 2025 at 9:00 AM, John Smith met with Jane Doe at the Hilton Midtown hotel in New York City to discuss a $2,500,000 licensing deal for the Hitorro platform.',
-            },
-          ],
-        },
-      },
-      {
-        id: { domain: 'sysobject', did: 'doc-ner-002' },
-        type: 'core_sysobject',
-        dates: { created: '2025-03-04T14:15:00Z', modified: '2025-03-04T14:15:00Z' },
-        title: { mls: [{ lang: 'en', text: 'Project Kickoff in San Francisco' }] },
-        description: {
-          mls: [
-            {
-              lang: 'en',
-              text: 'On March 4, 2025 at 2:15 PM, Alice Johnson and Bob Lee met at the Moscone Center in San Francisco to review a $750,000 pilot project for a new Lucene-based search service.',
-            },
-          ],
-        },
-      },
-      {
-        id: { domain: 'sysobject', did: 'doc-ner-003' },
-        type: 'core_sysobject',
-        dates: { created: '2025-03-05T16:45:00Z', modified: '2025-03-05T16:45:00Z' },
-        title: { mls: [{ lang: 'en', text: 'European Customer Visit' }] },
-        description: {
-          mls: [
-            {
-              lang: 'en',
-              text: 'On March 5, 2025 at 4:45 PM, Maria Garcia met clients from Berlin at a café near Brandenburg Gate to negotiate a €120,000 annual support contract.',
-            },
-          ],
-        },
-      },
-    ];
+  const [indexingStatus, setIndexingStatus] = useState('');
 
+  const sampleDocuments = [
+    { id: { domain: 'sysobject', did: 'doc-ner-001' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Meeting Notes: John Smith in New York' }] }, description: { mls: [{ lang: 'en', text: 'On March 3, 2025 at 9:00 AM, John Smith met with Jane Doe at the Hilton Midtown hotel in New York City to discuss a $2,500,000 licensing deal for the Hitorro platform. Later that afternoon at 3:30 PM, they visited the office on 5th Avenue to finalize pricing details.' }] } },
+    { id: { domain: 'sysobject', did: 'doc-ner-002' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Project Kickoff in San Francisco' }] }, description: { mls: [{ lang: 'en', text: 'On March 4, 2025 at 2:15 PM, Alice Johnson and Bob Lee met at the Moscone Center in San Francisco to review a $750,000 pilot project for a new Lucene-based search service.' }] } },
+    { id: { domain: 'sysobject', did: 'doc-ner-003' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'European Customer Visit in Berlin' }] }, description: { mls: [{ lang: 'en', text: 'On March 5, 2025 at 4:45 PM, Maria Garcia met clients from Berlin at a café near Brandenburg Gate to negotiate a €120,000 annual support contract.' }] } },
+    { id: { domain: 'legal', did: 'doc-004' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Merger Agreement Between Acme Corporation and GlobalTech Industries' }] }, description: { mls: [{ lang: 'en', text: 'This merger agreement is entered into by Acme Corporation, headquartered in San Francisco, and GlobalTech Industries, based in London. The transaction, valued at approximately $4.7 billion, was negotiated by Sarah Mitchell of Baker McKenzie.' }] } },
+    { id: { domain: 'research', did: 'doc-005' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Annual Climate Report for the United Nations' }] }, description: { mls: [{ lang: 'en', text: 'Global temperatures have risen by 1.2 degrees Celsius since pre-industrial times according to NASA and the European Space Agency. Dr. James Hansen warns sea levels could rise by two meters by 2100.' }] } },
+    { id: { domain: 'finance', did: 'doc-006' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Quarterly Earnings Report for Morgan Stanley' }] }, description: { mls: [{ lang: 'en', text: 'Morgan Stanley reported revenue of $14.2 billion for the third quarter of 2024 exceeding Wall Street expectations. CFO Sharon Yeshaya presented results at the New York Stock Exchange.' }] } },
+    { id: { domain: 'engineering', did: 'doc-007' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Technical Specification for the Mars Habitat Module' }] }, description: { mls: [{ lang: 'en', text: 'The Mars Habitat Module designed by Dr. Robert Park at SpaceX in Hawthorne, California. NASA Johnson Space Center in Houston, Texas has conducted extensive simulations.' }] } },
+    { id: { domain: 'medical', did: 'doc-008' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Clinical Trial Results for Novartis Alzheimer Drug' }] }, description: { mls: [{ lang: 'en', text: 'Novartis announced positive Phase III results for NVS-2847 Alzheimer treatment. The study at Massachusetts General Hospital in Boston enrolled 3,200 patients.' }] } },
+    { id: { domain: 'government', did: 'doc-009' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Infrastructure Development Plan for Chicago' }] }, description: { mls: [{ lang: 'en', text: 'The City of Chicago approved a $9.8 billion infrastructure plan spanning 2025 through 2030. Mayor Brandon Johnson presented the plan with support from Governor J.B. Pritzker.' }] } },
+    { id: { domain: 'energy', did: 'doc-010' }, type: 'core_sysobject', title: { mls: [{ lang: 'en', text: 'Offshore Wind Farm Proposal for the North Sea' }] }, description: { mls: [{ lang: 'en', text: 'Orsted A/S based in Denmark submitted a proposal for a 2.4 gigawatt wind farm in the North Sea. Director Lars Toft Rasmussen estimates construction at 8.5 billion euros.' }] } },
+  ];
+
+  const loadSampleDocuments = () => {
+    setPendingDocs(sampleDocuments);
+    setIndexingStatus(`Loaded ${sampleDocuments.length} sample documents. Configure options below and click "Index" to process.`);
+  };
+
+  const addCustomDocument = () => {
     try {
-      const params = new URLSearchParams();
-      params.append('indexName', selectedIndex);
-      if (generateEmbedding && ollamaAvailable) {
-        params.append('generateEmbedding', 'true');
-      }
-      if (useKVStore && enrichBeforeStore) {
-        params.append('enrichBeforeStore', 'true');
-      }
-      await axios.post(endpoint, samples.map((s) => JSON.stringify(s)), { params });
-      refetchStats();
-      const message = (useKVStore && kvStoreStatus?.status === 'available')
-        ? 'Sample documents indexed to Lucene and KV store!'
-        : 'Sample documents indexed successfully!';
-      alert(message);
+      const doc = JSON.parse(documentJson);
+      setPendingDocs((prev) => [...prev, doc]);
+      setIndexingStatus(`${pendingDocs.length + 1} document(s) ready for indexing.`);
     } catch (e) {
-      alert('Error indexing samples: ' + (e as Error).message);
+      setIndexingStatus('Invalid JSON: ' + (e as Error).message);
     }
+  };
+
+  const handleIndex = () => {
+    if (pendingDocs.length === 0) {
+      setIndexingStatus('No documents loaded. Load sample documents or add a custom document first.');
+      return;
+    }
+    indexMutation.mutate(pendingDocs);
   };
 
   return (
@@ -507,114 +483,104 @@ export default function SearchPage() {
                 marginBottom: '0.5rem',
               }}
             >
-              <h4>Document JSON</h4>
-              <button
-                className="button button-secondary"
-                onClick={loadSampleDocuments}
-                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-              >
-                Load Sample Documents
-              </button>
-            </div>
-            <textarea
-              className="textarea"
-              value={documentJson}
-              onChange={(e) => setDocumentJson(e.target.value)}
-              style={{
-                minHeight: '300px',
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-              }}
-              placeholder="Enter JVS document JSON..."
-            />
-            {/* Embedding Generation Option */}
-            <div style={{ marginTop: '0.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '0.5rem' }}>
-                <input
-                  type="checkbox"
-                  checked={generateEmbedding}
-                  onChange={(e) => setGenerateEmbedding(e.target.checked)}
-                  style={{ marginRight: '0.5rem' }}
-                  disabled={!ollamaAvailable}
-                />
-                <Sparkles size={16} style={{ marginRight: '0.25rem', color: ollamaAvailable ? '#8b5cf6' : '#6c757d' }} />
-                <span style={{ fontSize: '0.875rem', color: ollamaAvailable ? 'inherit' : '#6c757d' }}>
-                  Generate embeddings for semantic search {!ollamaAvailable && '(Ollama required)'}
-                </span>
-              </label>
-            </div>
-            
-            {/* KV Store Indexing Option */}
-            {kvStoreStatus?.status === 'available' && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '0.5rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={useKVStore}
-                    onChange={(e) => setUseKVStore(e.target.checked)}
-                    style={{ marginRight: '0.5rem' }}
-                  />
-                  <HardDrive size={16} style={{ marginRight: '0.25rem' }} />
-                  <span style={{ fontSize: '0.875rem' }}>
-                    Store in KV Store (RocksDB) for full document retrieval
-                  </span>
-                </label>
-                {useKVStore && (
-                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginLeft: '1.5rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={enrichBeforeStore}
-                      onChange={(e) => setEnrichBeforeStore(e.target.checked)}
-                      style={{ marginRight: '0.5rem' }}
-                    />
-                    <span style={{ fontSize: '0.875rem' }}>
-                      Enrich document before storing (adds NER, segmentation, etc.)
-                    </span>
-                  </label>
-                )}
+              <h4>Documents</h4>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="button button-secondary" onClick={loadSampleDocuments}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}>
+                  Load 10 Samples
+                </button>
+                <button className="button button-secondary" onClick={() => { setPendingDocs([]); setIndexingStatus(''); }}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}>
+                  Clear List
+                </button>
+                <button className="button button-secondary" onClick={handleClearIndex}
+                  disabled={clearMutation.isPending}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: '#dc3545' }}>
+                  <Trash2 size={12} style={{ marginRight: '0.25rem' }} />
+                  {clearMutation.isPending ? 'Clearing...' : 'Clear Index'}
+                </button>
               </div>
-            )}
-            <button
-              className="button button-primary"
-              onClick={handleIndexDocument}
-              disabled={indexMutation.isPending}
-              style={{ marginTop: '0.5rem', width: '100%' }}
-            >
-              {indexMutation.isPending ? 'Indexing...' : 
-                (useKVStore && kvStoreStatus?.status === 'available') ? 'Index to Lucene + KV Store' : 'Index Document'}
-            </button>
-            {indexMutation.isSuccess && indexMutation.data && (
-              <div
-                className="alert"
-                style={{
-                  marginTop: '0.5rem',
-                  padding: '0.5rem',
-                  background: '#d4edda',
-                  color: '#155724',
-                  borderRadius: '0.25rem',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <div>✓ Document indexed successfully!</div>
-                {indexMutation.data.embeddingGenerated !== undefined && (
-                  <div style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
-                    {indexMutation.data.embeddingGenerated ? (
-                      <span style={{ color: '#8b5cf6' }}>
-                        <Sparkles size={12} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                        Embedding generated
+            </div>
+
+            {/* Pending documents summary */}
+            <div style={{ padding: '0.5rem', background: pendingDocs.length > 0 ? '#f0fdf4' : '#f8fafc',
+              borderRadius: '0.375rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+              {pendingDocs.length === 0 ? (
+                <span style={{ color: 'var(--text-secondary)' }}>No documents loaded. Load samples or add a custom document below.</span>
+              ) : (
+                <div>
+                  <strong>{pendingDocs.length} document(s) ready for indexing:</strong>
+                  <div style={{ marginTop: '0.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    {pendingDocs.map((doc, i) => (
+                      <span key={i} style={{ fontSize: '0.75rem', padding: '0.1rem 0.4rem', background: '#dbeafe', borderRadius: '0.2rem' }}>
+                        {doc?.id?.did || `doc-${i}`}
                       </span>
-                    ) : (
-                      <span style={{ color: '#6c757d' }}>
-                        No embedding generated
-                      </span>
-                    )}
+                    ))}
                   </div>
-                )}
-              </div>
-            )}
-            {indexMutation.isError && (
-              <div className="alert alert-error" style={{ marginTop: '0.5rem' }}>
-                Error: {(indexMutation.error as any)?.response?.data?.message || 'Unknown error'}
+                </div>
+              )}
+            </div>
+
+            {/* Add custom document */}
+            <details style={{ marginBottom: '0.5rem' }}>
+              <summary style={{ fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                Add custom document JSON
+              </summary>
+              <textarea className="textarea" value={documentJson} onChange={(e) => setDocumentJson(e.target.value)}
+                style={{ minHeight: '150px', fontFamily: 'monospace', fontSize: '0.8rem', marginTop: '0.5rem' }}
+                placeholder="Enter JVS document JSON..." />
+              <button className="button button-secondary" onClick={addCustomDocument}
+                style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                Add to List
+              </button>
+            </details>
+
+            {/* Pipeline Options */}
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>Enrichment Tags</div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              {['basic', 'segmented', 'ner', 'pos', 'hash', 'parsed'].map((tag) => (
+                <label key={tag} style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={enrichTags.includes(tag)}
+                    onChange={() => setEnrichTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag])}
+                    style={{ marginRight: '0.25rem' }} />
+                  {tag}
+                </label>
+              ))}
+            </div>
+
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+              Translate to (Ollama — runs before enrichment)
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              {[
+                { code: 'de', label: 'German' }, { code: 'es', label: 'Spanish' },
+                { code: 'fr', label: 'French' }, { code: 'it', label: 'Italian' },
+                { code: 'nl', label: 'Dutch' }, { code: 'pt', label: 'Portuguese' },
+              ].map(({ code, label }) => (
+                <label key={code} style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={targetLangs.includes(code)}
+                    onChange={() => setTargetLangs((prev) => prev.includes(code) ? prev.filter((l) => l !== code) : [...prev, code])}
+                    style={{ marginRight: '0.25rem' }} />
+                  {code} ({label})
+                </label>
+              ))}
+            </div>
+
+            {/* Index Button — triggers the full pipeline */}
+            <button className="button button-primary" onClick={handleIndex}
+              disabled={indexMutation.isPending || pendingDocs.length === 0}
+              style={{ width: '100%' }}>
+              {indexMutation.isPending
+                ? `Processing ${pendingDocs.length} documents...`
+                : `Translate → Enrich → Index ${pendingDocs.length} doc(s) to Lucene + KV Store`}
+            </button>
+
+            {/* Status */}
+            {indexingStatus && (
+              <div style={{ marginTop: '0.5rem', padding: '0.5rem', borderRadius: '0.25rem', fontSize: '0.85rem',
+                background: indexMutation.isError ? '#fef2f2' : indexMutation.isSuccess ? '#f0fdf4' : '#f0f9ff',
+                color: indexMutation.isError ? '#991b1b' : indexMutation.isSuccess ? '#166534' : '#1e40af' }}>
+                {indexingStatus}
               </div>
             )}
           </div>
@@ -622,22 +588,9 @@ export default function SearchPage() {
           <div>
             <h4 style={{ marginBottom: '0.5rem' }}>Quick Actions</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <button
-                className="button button-secondary"
-                onClick={() => refetchStats()}
-                style={{ justifyContent: 'flex-start' }}
-              >
+              <button className="button button-secondary" onClick={() => refetchStats()} style={{ justifyContent: 'flex-start' }}>
                 <Database size={16} style={{ marginRight: '0.5rem' }} />
                 Refresh Stats
-              </button>
-              <button
-                className="button button-secondary"
-                onClick={handleClearIndex}
-                disabled={clearMutation.isPending}
-                style={{ justifyContent: 'flex-start', color: '#dc3545' }}
-              >
-                <Trash2 size={16} style={{ marginRight: '0.5rem' }} />
-                {clearMutation.isPending ? 'Clearing...' : 'Clear Index'}
               </button>
             </div>
 
@@ -1066,8 +1019,15 @@ export default function SearchPage() {
             <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
               Query: <code>{searchResult.query}</code>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', marginTop: '0.25rem' }}>
-              {searchResult.totalHits} document(s) found
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span>{searchResult.totalHits} document(s) found</span>
+              {(searchResult as any).fetchedFromKV === true ? (
+                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', background: '#8b5cf6', color: 'white', borderRadius: '0.25rem' }}>Source: KV Store</span>
+              ) : (searchResult as any).kvFallback ? (
+                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', background: '#f59e0b', color: 'white', borderRadius: '0.25rem' }}>Source: Index (KV fallback)</span>
+              ) : (
+                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', background: '#3b82f6', color: 'white', borderRadius: '0.25rem' }}>Source: Index</span>
+              )}
             </div>
           </div>
 
@@ -1116,31 +1076,67 @@ export default function SearchPage() {
           )}
 
           {/* Documents */}
-          <h4 style={{ marginBottom: '0.5rem' }}>Documents</h4>
+          <h4 style={{ marginBottom: '0.5rem' }}>Documents ({searchResult.documents.length})</h4>
           {searchResult.documents.length === 0 ? (
             <div style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
-              No documents found
+              No documents found. {fetchFromKV ? 'Try disabling "Fetch from KV store" — documents may not be in the KV store.' : ''}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {searchResult.documents.map((doc, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '1rem',
-                    background: 'var(--background)',
-                    borderRadius: '0.375rem',
-                  }}
-                >
-                  <ReactJson
-                    src={doc}
-                    theme="rjv-default"
-                    collapsed={1}
-                    displayDataTypes={false}
-                    displayObjectSize={false}
-                    enableClipboard={true}
-                    name={null}
-                  />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {searchResult.documents.map((doc: any, idx: number) => (
+                <div key={idx} style={{ border: '1px solid #cbd5e1', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      background: '#f1f5f9',
+                      display: 'flex',
+                      gap: '0.5rem',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      fontSize: '0.85rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {doc?._score != null && (
+                      <span style={{ color: '#16a34a', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        {Number(doc._score).toFixed(4)}
+                      </span>
+                    )}
+                    {doc?.id && (
+                      <code style={{ color: '#2563eb', fontSize: '0.8rem' }}>
+                        {doc.id.domain}/{doc.id.did}
+                      </code>
+                    )}
+                    <span style={{ flex: 1 }}>
+                      {doc?.title?.mls?.[0]?.text?.split('\n')[0]?.substring(0, 80) ||
+                       doc?.description?.mls?.[0]?.text?.substring(0, 80) ||
+                       `Document ${idx + 1}`}
+                    </span>
+                    {/* Show language badges */}
+                    {doc?.title?.mls?.length > 1 && (
+                      <span style={{ fontSize: '0.7rem', display: 'flex', gap: '0.2rem' }}>
+                        {(doc.title.mls as any[]).map((e: any) => (
+                          <span key={e.lang} style={{ padding: '0.1rem 0.3rem', background: '#dbeafe', color: '#1e40af', borderRadius: '0.2rem' }}>
+                            {e.lang}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                    {/* Show NER badge if present */}
+                    {doc?.title?.mls?.[0]?.segmented_ner && (
+                      <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', background: '#dcfce7', color: '#166534', borderRadius: '0.2rem' }}>NER</span>
+                    )}
+                  </div>
+                  <div style={{ padding: '0.5rem 0.75rem', maxHeight: '500px', overflow: 'auto' }}>
+                    <ReactJson
+                      src={doc}
+                      name={null}
+                      collapsed={2}
+                      displayDataTypes={false}
+                      displayObjectSize={true}
+                      enableClipboard={true}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -1212,7 +1208,6 @@ export default function SearchPage() {
                   </div>
                   <ReactJson
                     src={doc}
-                    theme="rjv-default"
                     collapsed={1}
                     displayDataTypes={false}
                     displayObjectSize={false}

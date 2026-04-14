@@ -2,10 +2,11 @@
 
 server:
   port: 8080
-  # Tomcat Configuration for large file uploads
+  # Tomcat Configuration
   tomcat:
     max-swallow-size: 500MB       # Maximum size for POST data (avoids connection reset)
     max-http-form-post-size: 500MB  # Maximum size for POST requests
+    connection-timeout: 600000     # 10 min — translation of many docs takes time
 
 spring:
   application:

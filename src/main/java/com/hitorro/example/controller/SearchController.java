@@ -18,6 +18,7 @@ import com.hitorro.index.search.SearchResult;
 import com.hitorro.index.stream.IndexerStream;
 import com.hitorro.index.stream.SearchResponseStream;
 import com.hitorro.jsontypesystem.JVS;
+import com.hitorro.jsontypesystem.JVS2JVSTranslationMapper;
 import com.hitorro.jsontypesystem.JsonTypeSystem;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.obj.core.solr.JVS2JVSEnrichMapper;
@@ -44,9 +45,14 @@ import reactor.core.publisher.Flux;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Value;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -71,9 +77,15 @@ public class SearchController {
     @Autowired(required = false)
     @Qualifier("documentStore")
     private KVStore documentStore;
-    
+
     @Autowired(required = false)
     private EmbeddingService embeddingService;
+
+    @Value("${spring.ai.ollama.base-url:http://localhost:11434}")
+    private String ollamaUrl;
+
+    @Value("${hitorro.ollama.model:llama3.2}")
+    private String ollamaModel;
     
     @PostConstruct
     public void initializeIndex() {
@@ -107,12 +119,13 @@ public class SearchController {
             //   *.text_de_m -> GermanAnalyzer (with compound noun splitting, umlaut normalization)
             //   *.identifier_s -> KeywordAnalyzer (exact match, no tokenization)
             IndexConfig.Builder configBuilder = IndexConfig.builder()
-                    .filesystem(indexPath.resolve(defaultIndexName));
-            
+                    .filesystem(indexPath.resolve(defaultIndexName))
+                    .storeSource(false);  // Don't store full doc in index — use KV store for retrieval
+
             if (embeddingConfig != null) {
                 configBuilder.embeddings(embeddingConfig);
             }
-            
+
             IndexConfig config = configBuilder.build();
             
             // Get default type for core_sysobject
@@ -302,6 +315,10 @@ public class SearchController {
             @RequestParam(defaultValue = "true") boolean generateEmbedding,
             @Parameter(description = "Enrich document before storing in KV store")
             @RequestParam(defaultValue = "false") boolean enrichBeforeStore,
+            @Parameter(description = "Comma-separated target languages for translation")
+            @RequestParam(required = false) String targetLangs,
+            @Parameter(description = "Comma-separated enrichment tags")
+            @RequestParam(required = false) String enrichTags,
             @Parameter(description = "JVS document as JSON string")
             @RequestBody String jsonDocument) {
         try {
@@ -311,7 +328,7 @@ public class SearchController {
                 error.put("message", "KV store not configured");
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
             }
-            
+
             JVS document = JVS.read(jsonDocument);
             
             // Check if JVS has a valid type
@@ -365,14 +382,36 @@ public class SearchController {
                 docId = UUID.randomUUID().toString();
             }
             
-            // Optionally enrich document before storing - only if document has valid type
+            // Step 1: Translate (before enrichment so NLP runs on all languages)
+            if (targetLangs != null && !targetLangs.isEmpty()) {
+                List<String> langList = Arrays.stream(targetLangs.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).toList();
+                if (!langList.isEmpty()) {
+                    try {
+                        JVS2JVSTranslationMapper translationMapper = JVS2JVSTranslationMapper.builder()
+                                .translator(this::callOllamaTranslate)
+                                .sourceLanguage("en")
+                                .targetLanguages(langList)
+                                .mlsFields("title.mls", "description.mls", "body.mls")
+                                .build();
+                        translationMapper.apply(document);
+                        logger.info("Translated document {} to {}", docId, targetLangs);
+                    } catch (Exception e) {
+                        logger.warn("Translation failed for {}: {}", docId, e.getMessage());
+                    }
+                }
+            }
+
+            // Step 2: Enrich (NLP on all language entries including translated)
             JVS documentToStore = document;
             if (enrichBeforeStore && document.getType() != null) {
                 logger.info("Enriching document before storing in KV store");
-                JVS2JVSEnrichMapper enrichMapper = new JVS2JVSEnrichMapper();
+                JVS2JVSEnrichMapper enrichMapper = (enrichTags != null && !enrichTags.isEmpty())
+                        ? new JVS2JVSEnrichMapper(enrichTags.split(","))
+                        : new JVS2JVSEnrichMapper();
                 documentToStore = enrichMapper.apply(document);
                 if (documentToStore == null) {
-                    documentToStore = document; // Fallback to original
+                    documentToStore = document;
                 }
             } else if (enrichBeforeStore && document.getType() == null) {
                 logger.warn("Skipping enrichment for document without type. DocId: {}", docId);
@@ -417,7 +456,7 @@ public class SearchController {
     @PostMapping("/index/batch/withkv")
     @Operation(
             summary = "Batch index to both Lucene and KV store",
-            description = "Indexes documents into Lucene and stores full JSON in KV store using batch operations with optional enrichment and embedding generation"
+            description = "Indexes documents into Lucene and stores full JSON in KV store. Pipeline: translate → enrich → store in KV + index in Lucene."
     )
     @ApiResponse(responseCode = "200", description = "Documents indexed and stored successfully")
     public ResponseEntity<Map<String, Object>> batchIndexWithKVStore(
@@ -427,6 +466,10 @@ public class SearchController {
             @RequestParam(defaultValue = "true") boolean generateEmbedding,
             @Parameter(description = "Enrich documents before storing in KV store")
             @RequestParam(defaultValue = "false") boolean enrichBeforeStore,
+            @Parameter(description = "Comma-separated target languages for translation (e.g. de,es,fr). Requires Ollama.")
+            @RequestParam(required = false) String targetLangs,
+            @Parameter(description = "Comma-separated enrichment tags (e.g. basic,segmented,ner). Defaults to full enrichment if enrichBeforeStore is true.")
+            @RequestParam(required = false) String enrichTags,
             @Parameter(description = "Array of JVS documents")
             @RequestBody List<String> jsonDocuments) {
         try {
@@ -438,110 +481,119 @@ public class SearchController {
             }
             
             List<JVS> documents = new ArrayList<>();
-            List<float[]> embeddings = new ArrayList<>();  // Store embeddings separately
+            List<float[]> embeddings = new ArrayList<>();
             Map<byte[], byte[]> kvBatch = new HashMap<>();
             List<String> documentIds = new ArrayList<>();
             int embeddingsGenerated = 0;
-            
-            // Create enrichment mapper if needed
-            JVS2JVSEnrichMapper enrichMapper = enrichBeforeStore ? new JVS2JVSEnrichMapper() : null;
-            if (enrichBeforeStore) {
-                logger.info("Enriching {} documents before storing in KV store", jsonDocuments.size());
+            int translatedCount = 0;
+
+            // Build translation mapper if target languages specified
+            JVS2JVSTranslationMapper translationMapper = null;
+            if (targetLangs != null && !targetLangs.isEmpty()) {
+                List<String> langList = Arrays.stream(targetLangs.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).toList();
+                if (!langList.isEmpty()) {
+                    translationMapper = JVS2JVSTranslationMapper.builder()
+                            .translator(this::callOllamaTranslate)
+                            .sourceLanguage("en")
+                            .targetLanguages(langList)
+                            .mlsFields("title.mls", "description.mls", "body.mls")
+                            .build();
+                    logger.info("Translation enabled for languages: {}", langList);
+                }
             }
-            
+
+            // Create enrichment mapper with requested tags (defaults to "basic" if none specified)
+            JVS2JVSEnrichMapper enrichMapper = null;
+            if (enrichBeforeStore) {
+                if (enrichTags != null && !enrichTags.isEmpty()) {
+                    enrichMapper = new JVS2JVSEnrichMapper(enrichTags.split(","));
+                } else {
+                    enrichMapper = new JVS2JVSEnrichMapper();
+                }
+            }
+
             IndexManager.IndexHandle handle = indexManager.getIndex(indexName);
             if (handle == null) {
                 throw new IllegalArgumentException("Index '" + indexName + "' does not exist");
             }
-            
-            for (String jsonDoc : jsonDocuments) {
+
+            long pipelineStart = System.currentTimeMillis();
+            logger.info("Processing {} documents (translate={}, enrich={}, embeddings={})",
+                    jsonDocuments.size(), translationMapper != null, enrichBeforeStore, generateEmbedding);
+
+            for (int docIdx = 0; docIdx < jsonDocuments.size(); docIdx++) {
+                String jsonDoc = jsonDocuments.get(docIdx);
                 JVS document = JVS.read(jsonDoc);
-                
-                // Check if JVS has a valid type - skip enrichment if not
-                if (document.getType() == null) {
-                    logger.warn("Document has null type, skipping enrichment. JSON: {}", 
-                               jsonDoc.length() > 200 ? jsonDoc.substring(0, 200) + "..." : jsonDoc);
-                }
-                
-                // Generate embedding OUT-OF-BAND (not in document JSON)
-                float[] embedding = null;
-                if (generateEmbedding && embeddingService != null && embeddingService.isAvailable()) {
-                    String text = embeddingService.extractTextForEmbedding(document);
-                    logger.info("[batch/withkv] Doc {} extracted text length: {}", 
-                               document.get("id.did"), text != null ? text.length() : "null");
-                    if (text != null && !text.isEmpty()) {
-                        embedding = embeddingService.generateEmbedding(text);
-                        logger.info("[batch/withkv] Doc {} generated embedding: dimension={}", 
-                                   document.get("id.did"), embedding != null ? embedding.length : "null");
-                        if (embedding != null) {
-                            embeddingsGenerated++;
-                        }
-                    } else {
-                        logger.warn("[batch/withkv] Doc {} - no text extracted for embedding", document.get("id.did"));
-                    }
-                } else {
-                    logger.debug("[batch/withkv] Doc {} - embedding generation skipped (enabled={}, service={}, available={})",
-                               document.get("id.did"), generateEmbedding, 
-                               embeddingService != null, 
-                               embeddingService != null ? embeddingService.isAvailable() : "N/A");
-                }
-                
-                documents.add(document);
-                embeddings.add(embedding);  // Store embedding separately (can be null)
-                
-                // Extract or generate document ID
+
                 Object docIdObj = document.get("id.did");
-                String docId;
-                if (docIdObj != null) {
-                    // Remove quotes if present
-                    docId = docIdObj.toString().replaceAll("\"", "");
-                } else {
-                    docId = UUID.randomUUID().toString();
+                String docId = docIdObj != null ? docIdObj.toString().replaceAll("\"", "") : UUID.randomUUID().toString();
+
+                // Step 1: Translate (add multi-language MLS entries) BEFORE enrichment
+                if (translationMapper != null) {
+                    try {
+                        long t0 = System.currentTimeMillis();
+                        translationMapper.apply(document);
+                        translatedCount++;
+                        logger.info("  [{}/{}] Translated {} in {}ms", docIdx + 1, jsonDocuments.size(),
+                                docId, System.currentTimeMillis() - t0);
+                    } catch (Exception e) {
+                        logger.warn("  [{}/{}] Translation failed for {}: {}", docIdx + 1, jsonDocuments.size(),
+                                docId, e.getMessage());
+                    }
                 }
-                documentIds.add(docId);
-                
-                // Optionally enrich before storing - only if document has valid type
+
+                // Step 2: Enrich (NLP on all languages including translated)
                 JVS documentToStore = document;
                 if (enrichBeforeStore && enrichMapper != null && document.getType() != null) {
                     documentToStore = enrichMapper.apply(document);
-                    if (documentToStore == null) {
-                        documentToStore = document; // Fallback
-                    }
-                } else if (enrichBeforeStore && document.getType() == null) {
-                    logger.warn("Skipping enrichment for document without type: {}", docId);
+                    if (documentToStore == null) documentToStore = document;
                 }
-                
-                // Prepare for batch KV store (enriched or original)
+
+                // Step 3: Generate embedding
+                float[] embedding = null;
+                if (generateEmbedding && embeddingService != null && embeddingService.isAvailable()) {
+                    String text = embeddingService.extractTextForEmbedding(document);
+                    if (text != null && !text.isEmpty()) {
+                        embedding = embeddingService.generateEmbedding(text);
+                        if (embedding != null) embeddingsGenerated++;
+                    }
+                }
+
+                documents.add(documentToStore);
+                embeddings.add(embedding);
+                documentIds.add(docId);
+
+                // Store each doc in KV immediately (don't wait for all to finish)
                 byte[] key = docId.getBytes(StandardCharsets.UTF_8);
                 String jsonToStore = objectMapper.writeValueAsString(documentToStore.getJsonNode());
                 byte[] value = jsonToStore.getBytes(StandardCharsets.UTF_8);
-                kvBatch.put(key, value);
+                documentStore.put(key, value);
+
+                // Index in Lucene immediately
+                handle.getWriter().indexDocument(documentToStore, embedding);
+
+                logger.info("  [{}/{}] Indexed+stored {}", docIdx + 1, jsonDocuments.size(), docId);
             }
-            
-            // Batch store in KV store
-            Result<Void> batchResult = documentStore.batchPut(kvBatch, false);
-            if (!batchResult.isSuccess()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("status", "error");
-                error.put("message", "Failed to batch store in KV: " + batchResult.getError().orElse("Unknown error"));
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-            }
-            
-            // Index in Lucene with out-of-band embeddings
-            for (int i = 0; i < documents.size(); i++) {
-                handle.getWriter().indexDocument(documents.get(i), embeddings.get(i));
-            }
+
             indexManager.commit(indexName);
+            long elapsed = System.currentTimeMillis() - pipelineStart;
+            logger.info("Pipeline complete: {} docs in {}ms", documents.size(), elapsed);
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("indexed", documents.size());
             response.put("embeddingsGenerated", embeddingsGenerated);
+            if (translationMapper != null) {
+                response.put("translated", translatedCount);
+                response.put("targetLangs", targetLangs);
+            }
+            if (enrichBeforeStore) response.put("enriched", true);
             response.put("indexName", indexName);
             response.put("documentIds", documentIds);
             response.put("storedInKV", true);
             response.put("indexedInLucene", true);
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error batch indexing with KV store", e);
@@ -715,27 +767,37 @@ public class SearchController {
             
             if (fetchFromKV) {
                 // Use SearchResultIterator with KV store enrichment
-                logger.info("Fetching {} documents from KV store in batches of {}", 
+                logger.info("Fetching {} documents from KV store in batches of {}",
                             result.getDocuments().size(), batchSize);
-                
+
                 SearchResultIterator iterator = new SearchResultIterator(
-                        result.getDocuments(), 
-                        documentStore, 
+                        result.getDocuments(),
+                        documentStore,
                         batchSize
                 );
-                
+
                 AbstractIterator<JVS> enrichedDocs = iterator.iterator();
-                int count = 0;
+                int kvHits = 0;
                 while (enrichedDocs.hasNext()) {
                     JVS doc = enrichedDocs.next();
-                    count++;
-                    logger.info("Got document #{}: {}", count, (doc != null ? "not null" : "NULL"));
                     if (doc != null) {
                         docs.add(doc.getJsonNode());
+                        kvHits++;
                     }
                 }
                 enrichedDocs.close();
-                logger.info("KV enrichment complete. Added {} documents out of {} fetched", docs.size(), count);
+
+                // Fall back to index documents if KV store returned nothing
+                if (docs.isEmpty() && !result.getDocuments().isEmpty()) {
+                    logger.info("KV store returned no documents, falling back to index results");
+                    for (JVS doc : result.getDocuments()) {
+                        docs.add(doc.getJsonNode());
+                    }
+                    response.put("fetchedFromKV", false);
+                    response.put("kvFallback", true);
+                } else {
+                    logger.info("KV enrichment complete: {} documents from KV", kvHits);
+                }
             } else {
                 // Return search results as-is
                 for (JVS doc : result.getDocuments()) {
@@ -1089,7 +1151,8 @@ public class SearchController {
             
             // Create index config with embedding support if available
             IndexConfig.Builder configBuilder = IndexConfig.builder()
-                    .filesystem(indexPath.resolve(indexName));
+                    .filesystem(indexPath.resolve(indexName))
+                    .storeSource(false);
             
             // Add embedding config if EmbeddingService is available
             if (embeddingService != null && embeddingService.isAvailable()) {
@@ -1523,6 +1586,38 @@ public class SearchController {
             error.put("status", "error");
             error.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    // ─── Ollama Translation Helper ────────────────────────────────
+
+    String callOllamaTranslate(String text, String sourceLang, String targetLang) {
+        try {
+            String langName = switch (targetLang) {
+                case "de" -> "German"; case "es" -> "Spanish"; case "fr" -> "French";
+                case "it" -> "Italian"; case "nl" -> "Dutch"; case "pt" -> "Portuguese";
+                case "ja" -> "Japanese"; case "zh" -> "Chinese";
+                default -> targetLang;
+            };
+            String prompt = "Translate the following text from English to " + langName +
+                    ". Return ONLY the translated text, no explanations:\n\n" + text;
+            String body = "{\"model\":\"" + ollamaModel + "\",\"prompt\":" +
+                    objectMapper.writeValueAsString(prompt) + ",\"stream\":false}";
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(ollamaUrl + "/api/generate"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            com.fasterxml.jackson.databind.JsonNode responseJson = objectMapper.readTree(response.body());
+            if (responseJson != null && responseJson.has("response")) {
+                return responseJson.get("response").asText().trim();
+            }
+            return "[Translation unavailable]";
+        } catch (Exception e) {
+            logger.warn("Translation failed: {}", e.getMessage());
+            return "[Translation unavailable - " + e.getMessage() + "]";
         }
     }
 }
