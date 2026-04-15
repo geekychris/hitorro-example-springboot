@@ -102,7 +102,7 @@ Add Hitorro-specific metadata annotations:
     name = "Product Review"
 )
 public class ProductReview extends Document {
-    public static final int SerializationVersion = 1;
+    public static int SerializationVersion = 1;
     // ...
 }
 ```

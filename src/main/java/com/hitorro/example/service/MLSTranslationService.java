@@ -45,7 +45,7 @@ public class MLSTranslationService {
     /**
      * Supported language codes with their display names
      */
-    public static final Map<String, String> SUPPORTED_LANGUAGES = new LinkedHashMap<>();
+    public static Map<String, String> SUPPORTED_LANGUAGES = new LinkedHashMap<>();
     static {
         SUPPORTED_LANGUAGES.put("en", "English");
         SUPPORTED_LANGUAGES.put("de", "German");
