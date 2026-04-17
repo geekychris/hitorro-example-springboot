@@ -556,6 +556,8 @@ export default function SearchPage() {
                 { code: 'de', label: 'German' }, { code: 'es', label: 'Spanish' },
                 { code: 'fr', label: 'French' }, { code: 'it', label: 'Italian' },
                 { code: 'nl', label: 'Dutch' }, { code: 'pt', label: 'Portuguese' },
+                { code: 'ja', label: 'Japanese' }, { code: 'zh', label: 'Chinese' },
+                { code: 'fa', label: 'Persian' }, { code: 'sv', label: 'Swedish' },
               ].map(({ code, label }) => (
                 <label key={code} style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={targetLangs.includes(code)}
@@ -704,6 +706,13 @@ export default function SearchPage() {
             <option value="de">German (de)</option>
             <option value="fr">French (fr)</option>
             <option value="es">Spanish (es)</option>
+            <option value="it">Italian (it)</option>
+            <option value="nl">Dutch (nl)</option>
+            <option value="pt">Portuguese (pt)</option>
+            <option value="ja">Japanese (ja)</option>
+            <option value="zh">Chinese (zh)</option>
+            <option value="fa">Persian (fa)</option>
+            <option value="sv">Swedish (sv)</option>
           </select>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
             Controls which language-specific analyzer is used for i18n text fields.
