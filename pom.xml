@@ -284,6 +284,13 @@
             </exclusions>
         </dependency>
 
+        <!-- HiTorro Git Tools -->
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-gittools</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
         <!-- Spring Boot Starters -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

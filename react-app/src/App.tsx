@@ -11,6 +11,7 @@ import StructuredLoggingPage from './pages/StructuredLoggingPage';
 import SearchPage from './pages/SearchPage';
 import LuceneViewerPage from './pages/LuceneViewerPage';
 import DataMapperPage from './pages/DataMapperPage';
+import GitToolsPage from './pages/GitToolsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +22,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'datamapper' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer';
+type TabId = 'dms' | 'crawler' | 'types' | 'datamapper' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer' | 'gittools';
 
 interface Tab {
   id: TabId;
@@ -40,6 +41,7 @@ const tabs: Tab[] = [
   { id: 'rest', label: 'REST API Explorer', description: 'Discover and test REST endpoints with streaming support' },
   { id: 'services', label: 'Services', description: 'Explore Hitorro services and dependency hierarchy' },
   { id: 'logging', label: 'Structured Logging', description: 'Config-driven structured logging with Kafka integration' },
+  { id: 'gittools', label: 'Git Tools', description: 'Repository manager, commit browser, tagging, and PR tools' },
 ];
 
 function App() {
@@ -67,6 +69,8 @@ function App() {
         return <ServicesExplorerPage />;
       case 'logging':
         return <StructuredLoggingPage />;
+      case 'gittools':
+        return <GitToolsPage />;
       default:
         return <div>Select a tab</div>;
     }
