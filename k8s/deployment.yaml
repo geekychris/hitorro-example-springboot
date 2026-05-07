@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hitorro-example-springboot
+    app.kubernetes.io/managed-by: devportal
+  name: hitorro-example-springboot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hitorro-example-springboot
+  template:
+    metadata:
+      labels:
+        app: hitorro-example-springboot
+    spec:
+      containers:
+      - name: hitorro-example-springboot
+        image: devportal/hitorro-example-springboot:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          periodSeconds: 10
+          initialDelaySeconds: 20
+          httpGet:
+            path: /
+            port: http

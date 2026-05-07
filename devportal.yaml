@@ -1,0 +1,34 @@
+apiVersion: devportal.io/v1
+kind: Asset
+metadata:
+  id: hitorro-example-springboot
+  name: Hitorro Spring Boot Example
+  description: |
+    Demo Spring Boot app showcasing the Hitorro framework — document management,
+    JSON type system, command framework, REST API, and a React UI for testing.
+  owner: geekychris
+  tags: [spring, java, hitorro, demo]
+spec:
+  type: service
+  language: java
+  build:
+    tool: maven
+    commands:
+      build:   mvn -DskipTests package
+      package: mvn -DskipTests package
+      install: mvn -DskipTests install
+      test:    mvn test
+      clean:   mvn clean
+  docker:
+    enabled: true
+    dockerfile: Dockerfile
+    context: .
+    image: devportal/hitorro-example-springboot:latest
+  kubernetes:
+    enabled: true
+    manifestPath: k8s
+    namespace: hitorro-example-springboot
+  runtime:
+    ports:
+      - name: http
+        purpose: http
