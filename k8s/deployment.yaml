@@ -23,9 +23,31 @@ spec:
         - name: http
           containerPort: 8080
           protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: docker
+        - name: HT_BIN
+          value: /opt/hitorro
+        - name: HT_HOME
+          value: /var/lib/hitorro
+        volumeMounts:
+        - name: ht-bin
+          mountPath: /opt/hitorro
+        - name: ht-home
+          mountPath: /var/lib/hitorro
         readinessProbe:
           periodSeconds: 10
-          initialDelaySeconds: 20
+          initialDelaySeconds: 60
+          failureThreshold: 12
           httpGet:
-            path: /
+            path: /actuator/health
             port: http
+      volumes:
+      - name: ht-bin
+        hostPath:
+          path: /Users/chris/hitorro
+          type: Directory
+      - name: ht-home
+        hostPath:
+          path: /Users/chris/hthome
+          type: Directory
