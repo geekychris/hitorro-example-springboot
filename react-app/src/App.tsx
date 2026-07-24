@@ -12,6 +12,7 @@ import SearchPage from './pages/SearchPage';
 import LuceneViewerPage from './pages/LuceneViewerPage';
 import DataMapperPage from './pages/DataMapperPage';
 import GitToolsPage from './pages/GitToolsPage';
+import PlaygroundPage from './pages/PlaygroundPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'datamapper' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer' | 'gittools';
+type TabId = 'dms' | 'crawler' | 'types' | 'datamapper' | 'playground' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer' | 'gittools';
 
 interface Tab {
   id: TabId;
@@ -35,6 +36,7 @@ const tabs: Tab[] = [
   { id: 'crawler', label: 'Filesystem Crawler', description: 'Import files and directories into DMS' },
   { id: 'types', label: 'Type System', description: 'JSON Type System enrichment and field exploration' },
   { id: 'datamapper', label: 'Data Mapper', description: 'Groovy DSL transforms with synthetic data generation' },
+  { id: 'playground', label: 'JVS Playground', description: 'Interactive showcase for new projection/validation/NLP features' },
   { id: 'search', label: 'Search', description: 'Lucene-based document search and indexing with facets' },
   { id: 'luceneviewer', label: 'Lucene Viewer', description: 'Luke-like index browser (fields, stored docs, terms, search)' },
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },
@@ -57,6 +59,8 @@ function App() {
         return <TypeSystemPage />;
       case 'datamapper':
         return <DataMapperPage />;
+      case 'playground':
+        return <PlaygroundPage />;
       case 'search':
         return <SearchPage />;
       case 'luceneviewer':

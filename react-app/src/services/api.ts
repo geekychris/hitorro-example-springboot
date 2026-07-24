@@ -234,4 +234,78 @@ export const dataMapperApi = {
     api.post<{ valid: boolean; error?: string }>('/datamapper/validate', body),
 };
 
+// JVS Playground API — interactive showcase for projection/validation/NLP features
+export const playgroundApi = {
+  samples: () =>
+    api.get<{
+      document: any;
+      typeDefinition: any;
+      references: Record<string, any>;
+    }>('/playground/samples'),
+
+  projectionRedact: (body: {
+    document: any;
+    typeDefinition?: any;
+    redactionKey?: string;
+  }) => api.post<PlaygroundProjectionResponse>('/playground/projection/redact', body),
+
+  projectionValidate: (body: { document: any; typeDefinition?: any }) =>
+    api.post<PlaygroundProjectionResponse>('/playground/projection/validate', body),
+
+  projectionFingerprint: (body: { document: any; typeDefinition?: any }) =>
+    api.post<PlaygroundProjectionResponse>('/playground/projection/fingerprint', body),
+
+  projectionMaterialize: (body: {
+    document: any;
+    typeDefinition?: any;
+    references?: Record<string, any>;
+  }) => api.post<PlaygroundProjectionResponse>('/playground/projection/materialize', body),
+
+  projectionI18n: (body: { document: any; typeDefinition?: any; lang: string }) =>
+    api.post<PlaygroundProjectionResponse>('/playground/projection/i18n', body),
+
+  projectionVectorize: (body: {
+    document: any;
+    typeDefinition?: any;
+    lang?: string;
+    dimensions?: number;
+  }) => api.post<PlaygroundProjectionResponse>('/playground/projection/vectorize', body),
+
+  validateDocument: (body: { document: any; typeDefinition?: any }) =>
+    api.post<{
+      valid: boolean;
+      violations?: Array<{ path: string; message: string; level: string }>;
+      report?: string;
+      error?: string;
+    }>('/playground/validate', body),
+
+  detectLang: (body: { text: string }) =>
+    api.post<{
+      language: string | null;
+      detector: string;
+      confidence?: number;
+      note?: string;
+    }>('/playground/detect-lang', body),
+
+  lemmatize: (body: { lang: string; tokens: string[]; posTags: string[] }) =>
+    api.post<{ lemmas?: string[]; error?: string; note?: string }>(
+      '/playground/lemmatize',
+      body
+    ),
+
+  dslTransform: (body: { script?: string; input?: any }) =>
+    api.post<{ input: any; output: any; error?: string }>(
+      '/playground/dsl-transform',
+      body
+    ),
+};
+
+export interface PlaygroundProjectionResponse {
+  source: any;
+  target: any;
+  digest?: string;
+  violations?: Array<{ path: string; message: string; level: string }>;
+  error?: string;
+}
+
 export default api;
