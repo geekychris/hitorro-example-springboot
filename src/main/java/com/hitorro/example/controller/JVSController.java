@@ -28,7 +28,6 @@ import com.hitorro.jsontypesystem.JsonTypeSystem;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.obj.core.solr.JVS2JVSEnrichMapper;
 import com.hitorro.util.basefile.fs.BaseFile;
-import com.hitorro.util.core.Env;
 import com.hitorro.util.core.iterator.JSONIterator;
 import com.hitorro.util.core.iterator.sinks.JsonSink;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,6 +40,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.hitorro.util.basefile.tools.EnvBaseFiles;
 
 import java.io.*;
 import java.util.*;
@@ -205,7 +205,7 @@ public class JVSController {
     public ResponseEntity<List<String>> listTypes() {
         try {
             // Get the types directory from HT_BIN/config/types
-            BaseFile typesDir = Env.getBinConfigBaseFile().getChild("types");
+            BaseFile typesDir = EnvBaseFiles.getBinConfigBaseFile().getChild("types");
             
             if (!typesDir.exists()) {
                 logger.warn("Types directory not found: {}", typesDir);
