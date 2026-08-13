@@ -13,6 +13,7 @@ import LuceneViewerPage from './pages/LuceneViewerPage';
 import DataMapperPage from './pages/DataMapperPage';
 import GitToolsPage from './pages/GitToolsPage';
 import PlaygroundPage from './pages/PlaygroundPage';
+import JvsSqlPage from './pages/JvsSqlPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,7 +24,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabId = 'dms' | 'crawler' | 'types' | 'datamapper' | 'playground' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer' | 'gittools';
+type TabId = 'dms' | 'crawler' | 'types' | 'datamapper' | 'playground' | 'jvssql' | 'commands' | 'rest' | 'services' | 'logging' | 'search' | 'luceneviewer' | 'gittools';
 
 interface Tab {
   id: TabId;
@@ -37,6 +38,7 @@ const tabs: Tab[] = [
   { id: 'types', label: 'Type System', description: 'JSON Type System enrichment and field exploration' },
   { id: 'datamapper', label: 'Data Mapper', description: 'Groovy DSL transforms with synthetic data generation' },
   { id: 'playground', label: 'JVS Playground', description: 'Interactive showcase for new projection/validation/NLP features' },
+  { id: 'jvssql', label: 'JVS SQL', description: 'Streaming SQL over JVS documents — Calcite parser, custom executor, spill sort, joins, windowed aggregation' },
   { id: 'search', label: 'Search', description: 'Lucene-based document search and indexing with facets' },
   { id: 'luceneviewer', label: 'Lucene Viewer', description: 'Luke-like index browser (fields, stored docs, terms, search)' },
   { id: 'commands', label: 'Commands', description: 'Execute CommandDef annotated methods' },
@@ -61,6 +63,8 @@ function App() {
         return <DataMapperPage />;
       case 'playground':
         return <PlaygroundPage />;
+      case 'jvssql':
+        return <JvsSqlPage />;
       case 'search':
         return <SearchPage />;
       case 'luceneviewer':

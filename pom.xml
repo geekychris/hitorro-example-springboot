@@ -42,6 +42,11 @@
             <artifactId>hitorro-basefile</artifactId>
             <version>3.0.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-jvssql</artifactId>
+            <version>3.0.1</version>
+        </dependency>
             <!-- Spring AI BOM -->
             <dependency>
                 <groupId>org.springframework.ai</groupId>
@@ -111,6 +116,13 @@
         <!-- Lucene viewer diagnostics (Luke-like tooling) -->
         <dependency>
             <groupId>com.hitorro</groupId><artifactId>hitorro-luceneviewer</artifactId><version>3.0.1</version>
+        </dependency>
+
+        <!-- SQL playground engine -->
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-jvssql</artifactId>
+            <version>3.0.1</version>
         </dependency>
 
         <!-- Hitorro DMS (required for DMS features) -->
