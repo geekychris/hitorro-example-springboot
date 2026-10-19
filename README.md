@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Hitorro Example Springboot logo" width="180">
+</p>
+
 # Hitorro Spring Boot Example Application
 
 A comprehensive example application demonstrating the integration of Hitorro framework with Spring Boot, including an interactive React UI for testing all features.
