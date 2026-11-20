@@ -11,6 +11,12 @@ server:
 spring:
   application:
     name: hitorro-example
+
+  # Spring Boot 4 writes HTTP JSON with Jackson 3 by default. Controllers here return
+  # Jackson 2 (com.fasterxml.jackson) JsonNodes, so keep HTTP JSON on Jackson 2.
+  http:
+    converters:
+      preferred-json-mapper: jackson2
   
   # Multipart File Upload Configuration
   servlet:
@@ -54,12 +60,12 @@ spring:
   ai:
     ollama:
       base-url: http://localhost:11434
+      # Spring AI 2.x flattened these (chat.options.model is deprecated).
+      # SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL still overrides the chat model.
       embedding:
-        options:
-          model: nomic-embed-text
+        model: nomic-embed-text
       chat:
-        options:
-          model: llama3.2  # translation and chat; the same model as hitorro.ai.model-name
+        model: ${SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL:llama3.2}  # translation and chat; the same model as hitorro.ai.model-name
 
 # Swagger/OpenAPI Configuration
 springdoc:
@@ -132,16 +138,21 @@ hitorro:
     enabled: true
     session-scope: prototype
     
-    # Database initialization from CSV files
-    # Disabled by default - Store objects require file system paths to be configured
-    # Enable and configure stores.csv if you need pre-configured content stores
+    # Database initialization from CSV files (runs when the application is ready;
+    # rows are matched on their key, so re-running it updates rather than duplicates)
     db-init:
-      enabled: false
+      enabled: true
       fail-on-error: false
       data-sets:
-        - name: "stores"
-          csv-file: "classpath:data/stores.csv"
-          consumer: "com.hitorro.basedms.csvconsumers.StoreCSVConsumer"
+        # Category domains the document API uses (status, priority, category)
+        - name: "domains"
+          csv-file: "classpath:data/domaininfo.csv"
+          consumer: "com.hitorro.basedms.csvconsumers.DomainInfoCSVConsumer"
+        # Store objects require file system paths to be configured; add this
+        # data set if you need pre-configured content stores:
+        # - name: "stores"
+        #   csv-file: "classpath:data/stores.csv"
+        #   consumer: "com.hitorro.basedms.csvconsumers.StoreCSVConsumer"
   
   # REST endpoint configuration
   rest:
