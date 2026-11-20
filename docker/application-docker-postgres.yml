@@ -42,7 +42,10 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        globally_quoted_identifiers: true
+        # Off: basedms opens its own SessionFactory with unquoted (folded)
+        # names; quoting here made Spring create "commitCount" while basedms
+        # wrote commitcount, and startup failed.
+        globally_quoted_identifiers: false
         format_sql: true
         jdbc:
           batch_size: 20

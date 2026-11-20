@@ -60,6 +60,9 @@ public class KVStoreConfig {
                 compression = CompressionType.SNAPPY;
             }
             
+            // RocksDB creates the store's own directory but not its parents.
+            java.nio.file.Files.createDirectories(java.nio.file.Path.of(kvStorePath).toAbsolutePath().getParent());
+
             // Build database configuration
             DatabaseConfig config = DatabaseConfig.builder(kvStorePath)
                     .storageMode(StorageMode.DISK)

@@ -17,6 +17,11 @@ spring:
   http:
     converters:
       preferred-json-mapper: jackson2
+    # Bound every outgoing HTTP call (Ollama via Spring AI's RestClient among
+    # them): without this an unreachable Ollama hangs the request indefinitely.
+    clients:
+      connect-timeout: 5s
+      read-timeout: 180s
   
   # Multipart File Upload Configuration
   servlet:
@@ -58,6 +63,14 @@ spring:
   
   # Spring AI Ollama Configuration
   ai:
+    # Spring AI retries a failed call 10 times by default; with the 5s connect
+    # timeout above, an unreachable Ollama then holds a request for minutes.
+    retry:
+      max-attempts: 3
+      backoff:
+        initial-interval: 1s
+        multiplier: 2
+        max-interval: 5s
     ollama:
       base-url: http://localhost:11434
       # Spring AI 2.x flattened these (chat.options.model is deprecated).
@@ -230,7 +243,7 @@ hitorro:
   # KV Store Configuration - RocksDB-based document storage
   kvstore:
     enabled: true  # Enable KV store bean initialization
-    path: ./data/kvstore  # Path to RocksDB database files
+    path: ${HT_HOME:.}/data/kvstore  # Path to RocksDB database files (under HT_HOME, which is writable in the image)
     compression: SNAPPY  # Compression type: NONE, SNAPPY, ZLIB, LZ4, ZSTD
     writeBufferSize: 67108864  # 64MB write buffer
     maxOpenFiles: 1000  # Maximum open file descriptors

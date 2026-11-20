@@ -699,6 +699,14 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- PostgreSQL: the docker-postgres profile (docker/application-docker-postgres.yml,
+             docker_build/docker-compose-postgres.yml) needs the driver at run time;
+             only its version was managed, so that profile couldn't start. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
 
         <!-- H2 Database - Runtime scope for persistent file database and H2 Console -->
         <dependency>
