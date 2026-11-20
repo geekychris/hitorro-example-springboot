@@ -87,6 +87,10 @@ public class SearchController {
     @Value("${hitorro.ollama.model:llama3.2}")
     private String ollamaModel;
     
+    /** Where the Lucene indexes live; empty means the system temp directory. */
+    @Value("${hitorro.search.index-path:}")
+    private String configuredIndexPath;
+
     @PostConstruct
     public void initializeIndex() {
         try {
@@ -94,7 +98,9 @@ public class SearchController {
             indexManager = new IndexManager("en");
             
             // Create index in temp directory for this example
-            indexPath = Paths.get(System.getProperty("java.io.tmpdir"), "hitorro-lucene-indexes");
+            indexPath = configuredIndexPath == null || configuredIndexPath.isBlank()
+                    ? Paths.get(System.getProperty("java.io.tmpdir"), "hitorro-lucene-indexes")
+                    : Paths.get(configuredIndexPath);
             logger.info("Initializing Lucene indexes at: {}", indexPath);
             
             // Check if embedding service is available and configure accordingly
