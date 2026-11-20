@@ -1,0 +1,4 @@
+domain,displayname,description,valuemapimpl
+status,Document Status,Status values for documents,com.hitorro.util.core.valuemap.NonValidatedFlatValueMap
+priority,Priority Level,Priority levels,com.hitorro.util.core.valuemap.NonValidatedFlatValueMap
+category,Document Category,Document categories,com.hitorro.util.core.valuemap.NonValidatedFlatValueMap

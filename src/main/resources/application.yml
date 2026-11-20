@@ -138,16 +138,21 @@ hitorro:
     enabled: true
     session-scope: prototype
     
-    # Database initialization from CSV files
-    # Disabled by default - Store objects require file system paths to be configured
-    # Enable and configure stores.csv if you need pre-configured content stores
+    # Database initialization from CSV files (runs when the application is ready;
+    # rows are matched on their key, so re-running it updates rather than duplicates)
     db-init:
-      enabled: false
+      enabled: true
       fail-on-error: false
       data-sets:
-        - name: "stores"
-          csv-file: "classpath:data/stores.csv"
-          consumer: "com.hitorro.basedms.csvconsumers.StoreCSVConsumer"
+        # Category domains the document API uses (status, priority, category)
+        - name: "domains"
+          csv-file: "classpath:data/domaininfo.csv"
+          consumer: "com.hitorro.basedms.csvconsumers.DomainInfoCSVConsumer"
+        # Store objects require file system paths to be configured; add this
+        # data set if you need pre-configured content stores:
+        # - name: "stores"
+        #   csv-file: "classpath:data/stores.csv"
+        #   consumer: "com.hitorro.basedms.csvconsumers.StoreCSVConsumer"
   
   # REST endpoint configuration
   rest:

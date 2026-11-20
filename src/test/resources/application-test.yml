@@ -64,8 +64,12 @@ hitorro:
     session-scope: prototype  # Use prototype scope for testing
     transaction-mode: spring-managed
     db-init:
-      enabled: false  # CSV loading handled by TestDMSConfiguration via integration events
-      # This avoids full service loading while still getting Store/DomainInfo data
+      # Same seeding path as the application: the category domains from data/domaininfo.csv
+      enabled: true
+      data-sets:
+        - name: "domains"
+          csv-file: "classpath:data/domaininfo.csv"
+          consumer: "com.hitorro.basedms.csvconsumers.DomainInfoCSVConsumer"
   commands:
     rest:
       enabled: true

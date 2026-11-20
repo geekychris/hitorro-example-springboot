@@ -491,8 +491,9 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-basedms</artifactId>
-            <!-- 3.1.0: Hibernate 7 port (Spring Boot 4 requires Hibernate 7) -->
-            <version>3.1.0</version>
+            <!-- 3.1.x: Hibernate 7 port (Spring Boot 4 requires Hibernate 7);
+                 3.1.1 can delete a version that other versions still reference -->
+            <version>3.1.1</version>
             <exclusions>
                 <!-- Exclude Log4j 1.x - Spring Boot uses Logback -->
                 <exclusion>
