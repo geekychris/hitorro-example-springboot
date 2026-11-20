@@ -174,7 +174,9 @@ public class NewTransformersIntegrationTest {
             
             // Verify JSON structure
             assertThat(jsonText)
-                .contains("\"Product\"", "\"Region\"", "\"Sales\"", "\"Quantity\"", "\"Date\"")
+                // The columns of test-sales-data.xlsx.
+                .contains("\"Date\"", "\"Product\"", "\"Region\"", "\"Units Sold\"", "\"Unit Price\"",
+                        "\"Total Revenue\"", "\"Sales Rep\"")
                 .contains("SmartHome Pro", "North America");
             
             System.out.println("\n   ✓✓✓ TEST PASSED! ✓✓✓\n");
