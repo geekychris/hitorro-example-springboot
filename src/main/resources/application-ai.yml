@@ -18,12 +18,10 @@ spring:
     ollama:
       base-url: http://localhost:11434
       chat:
-        options:
-          model: llama3.2          # For summarization and Q&A
-          temperature: 0.7         # 0.0-1.0 (lower = more factual)
+        model: ${SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL:llama3.2}  # For summarization and Q&A
+        temperature: 0.7         # 0.0-1.0 (lower = more factual)
       embedding:
-        options:
-          model: nomic-embed-text  # For vector embeddings
+        model: nomic-embed-text  # For vector embeddings
 
 # Logging for transformers and AI service
 logging:
@@ -41,8 +39,7 @@ spring:
   ai:
     ollama:
       chat:
-        options:
-          temperature: 0.5  # More deterministic for testing
+        temperature: 0.5  # More deterministic for testing
 
 logging:
   level:

@@ -307,7 +307,8 @@ hitorro-example-springboot/
 ## Technology Stack
 
 - **Java 21** (source/target)
-- **Spring Boot 3.2.2** with Spring Security
+- **Spring Boot 4.1.3** (Spring Framework 7) with Spring Security 7; HTTP JSON kept on Jackson 2 (`spring.http.converters.preferred-json-mapper=jackson2`)
+- **Spring AI 2.0.3** (`spring-ai-starter-model-ollama`; chat model `spring.ai.ollama.chat.model`, overridable with `SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL`)
 - **Hitorro Framework 3.0.0** (proprietary DMS framework)
 - **Apache Lucene 9.11.1** via `hitorro-index`
 - **H2 Database** (file-based, persistent)
