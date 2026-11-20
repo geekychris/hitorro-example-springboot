@@ -52,7 +52,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @AutoConfigureMockMvc
 class Jackson2AppRestGoldenTest {
 
-    static final String[] UNORDERED_KEYS = {"jvssql.examples", "lucene.stats", "actuator.health", "openapi"};
+    static final String[] UNORDERED_KEYS = {"jvssql.examples", "lucene.stats", "openapi"};
 
     @Autowired
     private MockMvc mvc;
@@ -98,6 +98,16 @@ class Jackson2AppRestGoldenTest {
         if (UNORDERED.contains(key)) {
             body = Canonical.sortKeys(body);
         }
+        if (key.startsWith("actuator.health")) {
+            // Strict, except inside each health component: on main the order of a component's
+            // "status" and "details" changes from one JVM run to the next (all components together;
+            // 2 of 6 recordings), while the top level (status, components, groups) and the order of
+            // the components never did. Sort only the component objects' own keys (depth 2).
+            body = Canonical.sortKeys(body, 2, 2);
+        }
+        if (key.startsWith("actuator.metric")) {
+            body = body.replaceAll("\"value\":[0-9.E-]+", "\"value\":<n>");   // the metric's current value
+        }
         // A JSON parse error's own message text and location differ between Jackson 2 and 3
         // ("field name" / "property name", "line: 1, column: 2" / "byte offset"): not pinned.
         body = body.replaceAll("Unexpected character \\('[^)]*\\)\\): was expecting double-quote to start (field|property) name\\\\n at \\[Source: [^\\]]*\\]",
@@ -109,6 +119,7 @@ class Jackson2AppRestGoldenTest {
     /**
      * Bodies built from {@code Map.of}/{@code HashMap}, whose key order changes from one JVM run to the
      * next on main too (found by recording main repeatedly): compared with object keys sorted.
+     * (actuator.health is compared strictly apart from the inside of each component, see call()).
      * "openapi": swagger-core's schema property order differs between main's test run and main's
      * packaged jar; the jars' /api-docs were compared byte for byte separately (identical).
      */
@@ -146,6 +157,9 @@ class Jackson2AppRestGoldenTest {
     void responsesMatchJackson2() throws Exception {
         // ---- actuator and app status
         call("actuator.health", get("/actuator/health"));
+        call("actuator.health.ping", get("/actuator/health/ping"));
+        call("actuator.info", get("/actuator/info"));
+        call("actuator.metric", get("/actuator/metrics/jvm.threads.daemon"));
         call("example.status", get("/api/example/status"));
         call("example.basic-service", get("/api/example/basic-service"));
         call("example.services", get("/api/example/services"));
