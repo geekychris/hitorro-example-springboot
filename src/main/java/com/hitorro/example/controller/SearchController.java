@@ -1,6 +1,6 @@
 package com.hitorro.example.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.example.search.SearchResultIterator;
 import com.hitorro.example.service.EmbeddingService;
 import com.hitorro.index.IndexManager;
@@ -57,6 +57,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import com.hitorro.util.json.JsonValues;
 
 /**
  * REST Controller for Lucene-based search and indexing operations.
@@ -68,7 +69,7 @@ import java.util.*;
 public class SearchController {
     
     private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
     
     private IndexManager indexManager;
     private Path indexPath;
@@ -1616,9 +1617,9 @@ public class SearchController {
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            com.fasterxml.jackson.databind.JsonNode responseJson = objectMapper.readTree(response.body());
+            tools.jackson.databind.JsonNode responseJson = objectMapper.readTree(response.body());
             if (responseJson != null && responseJson.has("response")) {
-                return responseJson.get("response").asText().trim();
+                return JsonValues.asText(responseJson.get("response")).trim();
             }
             return "[Translation unavailable]";
         } catch (Exception e) {

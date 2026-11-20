@@ -3,8 +3,8 @@
  */
 package com.hitorro.example.jvssql;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.jvssql.JvsSqlEngine;
@@ -38,7 +38,7 @@ import java.util.Map;
 @Tag(name = "JVS-SQL Playground", description = "Streaming SQL over JVS documents")
 public class JvsSqlPlaygroundController {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = com.hitorro.util.json.JsonMappers.json();
 
     /** Preset example — id, title, description, SQL, sample JVS array, JVS Type JSON, and the SQL table name. */
     public record Example(String id, String title, String description,

@@ -21,8 +21,8 @@
  */
 package com.hitorro.example.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.JsonTypeSystem;
 import com.hitorro.jsontypesystem.Type;
@@ -45,6 +45,7 @@ import com.hitorro.util.basefile.tools.EnvBaseFiles;
 import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.hitorro.util.json.JsonValues;
 
 /**
  * REST Controller for JSON Type System (JVS) operations.
@@ -56,7 +57,7 @@ import java.util.stream.Collectors;
 public class JVSController {
     
     private static final Logger logger = LoggerFactory.getLogger(JVSController.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
     
     /**
      * Enrich a JSON object using JVS2JVSEnrichMapper.
@@ -397,8 +398,8 @@ public class JVSController {
                                 
                                 if (fieldsNode.isArray()) {
                                     for (JsonNode pathNode : fieldsNode) {
-                                        if (pathNode.isTextual()) {
-                                            fieldPaths.add(pathNode.textValue());
+                                        if (pathNode.isString()) {
+                                            fieldPaths.add(JsonValues.textValue(pathNode));
                                         }
                                     }
                                 }

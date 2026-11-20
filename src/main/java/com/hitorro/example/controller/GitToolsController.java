@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.nio.file.Path;
 import java.util.*;
+import com.hitorro.util.json.JsonValues;
 
 /**
  * Git repository management, commit browsing, tagging, and PR tools.
@@ -48,26 +49,26 @@ public class GitToolsController {
     private void loadConfig() {
         try {
             if (java.nio.file.Files.exists(configFile())) {
-                var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                var mapper = com.hitorro.util.json.JsonMappers.json();
                 var config = mapper.readTree(configFile().toFile());
-                if (config.has("githubToken") && !config.get("githubToken").asText().isBlank()) {
-                    credentials.setGithubToken(config.get("githubToken").asText());
+                if (config.has("githubToken") && !JsonValues.asText(config.get("githubToken")).isBlank()) {
+                    credentials.setGithubToken(JsonValues.asText(config.get("githubToken")));
                 }
-                if (config.has("githubUsername") && !config.get("githubUsername").asText().isBlank()) {
-                    credentials.setGithubUsername(config.get("githubUsername").asText());
+                if (config.has("githubUsername") && !JsonValues.asText(config.get("githubUsername")).isBlank()) {
+                    credentials.setGithubUsername(JsonValues.asText(config.get("githubUsername")));
                 }
-                if (config.has("sshKeyPath") && !config.get("sshKeyPath").asText().isBlank()) {
-                    credentials.setSshKeyPath(config.get("sshKeyPath").asText());
+                if (config.has("sshKeyPath") && !JsonValues.asText(config.get("sshKeyPath")).isBlank()) {
+                    credentials.setSshKeyPath(JsonValues.asText(config.get("sshKeyPath")));
                 }
-                if (config.has("gitEmail") && !config.get("gitEmail").asText().isBlank()) {
-                    credentials.setGitEmail(config.get("gitEmail").asText());
+                if (config.has("gitEmail") && !JsonValues.asText(config.get("gitEmail")).isBlank()) {
+                    credentials.setGitEmail(JsonValues.asText(config.get("gitEmail")));
                 }
-                if (config.has("gitName") && !config.get("gitName").asText().isBlank()) {
-                    credentials.setGitName(config.get("gitName").asText());
+                if (config.has("gitName") && !JsonValues.asText(config.get("gitName")).isBlank()) {
+                    credentials.setGitName(JsonValues.asText(config.get("gitName")));
                 }
                 if (config.has("scanRoots") && config.get("scanRoots").isArray()) {
                     this.lastScanRoots = new ArrayList<>();
-                    config.get("scanRoots").forEach(n -> lastScanRoots.add(n.asText()));
+                    config.get("scanRoots").forEach(n -> lastScanRoots.add(JsonValues.asText(n)));
                 }
                 // Auto-scan if we have saved roots
                 if (!lastScanRoots.isEmpty()) {
@@ -86,8 +87,9 @@ public class GitToolsController {
     private void saveConfig() {
         try {
             java.nio.file.Files.createDirectories(configFile().getParent());
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
+            var mapper = com.hitorro.util.json.JsonMappers.builder()
+                .enable(tools.jackson.databind.SerializationFeature.INDENT_OUTPUT)
+                .build();
             var node = mapper.createObjectNode();
             if (credentials.getGithubToken() != null) node.put("githubToken", credentials.getGithubToken());
             if (credentials.getGithubUsername() != null) node.put("githubUsername", credentials.getGithubUsername());

@@ -1,7 +1,7 @@
 package com.hitorro.example.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.index.IndexManager;
 import com.hitorro.kvstore.KVStore;
 import com.hitorro.kvstore.Result;
@@ -34,7 +34,7 @@ import java.util.*;
 public class LuceneViewerController {
 
     private static final Logger logger = LoggerFactory.getLogger(LuceneViewerController.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
 
     @Autowired
     private SearchController searchController;
