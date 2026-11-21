@@ -98,13 +98,10 @@ class Jackson2AppRestGoldenTest {
         if (UNORDERED.contains(key)) {
             body = Canonical.sortKeys(body);
         }
-        if (key.startsWith("actuator.health")) {
-            // Strict, except inside each health component: on main the order of a component's
-            // "status" and "details" changes from one JVM run to the next (all components together;
-            // 2 of 6 recordings), while the top level (status, components, groups) and the order of
-            // the components never did. Sort only the component objects' own keys (depth 2).
-            body = Canonical.sortKeys(body, 2, 2);
-        }
+        // actuator.health is compared strictly. On main (Boot's Jackson 2 endpoint mapper) a health
+        // component's "status"/"details" order changed between JVM runs (IndicatedHealthDescriptor has
+        // only getters, ordered by Class.getDeclaredMethods); the golden holds main's usual order,
+        // status first, which hitorro-spring-boot-starter 4.0.0's endpoint mapper now always writes.
         if (key.startsWith("actuator.metric")) {
             body = body.replaceAll("\"value\":[0-9.E-]+", "\"value\":<n>");   // the metric's current value
         }
@@ -119,7 +116,7 @@ class Jackson2AppRestGoldenTest {
     /**
      * Bodies built from {@code Map.of}/{@code HashMap}, whose key order changes from one JVM run to the
      * next on main too (found by recording main repeatedly): compared with object keys sorted.
-     * (actuator.health is compared strictly apart from the inside of each component, see call()).
+     * (actuator.health is compared strictly, see call()).
      * "openapi": swagger-core's schema property order differs between main's test run and main's
      * packaged jar; the jars' /api-docs were compared byte for byte separately (identical).
      */
