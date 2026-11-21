@@ -21,8 +21,8 @@
  */
 package com.hitorro.example.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.base.objects.VersionableObject;
 import com.hitorro.basedms.jvs.DMSToJVSMapper;
 import com.hitorro.basedms.jvs.ConversionOptions;
@@ -54,7 +54,7 @@ import java.util.*;
 public class DMSJVSController {
     
     private static final Logger logger = LoggerFactory.getLogger(DMSJVSController.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
     
     private final DMSSessionFactory sessionFactory;
     

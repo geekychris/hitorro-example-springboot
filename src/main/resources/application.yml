@@ -12,11 +12,9 @@ spring:
   application:
     name: hitorro-example
 
-  # Spring Boot 4 writes HTTP JSON with Jackson 3 by default. Controllers here return
-  # Jackson 2 (com.fasterxml.jackson) JsonNodes, so keep HTTP JSON on Jackson 2.
+  # HTTP JSON goes through Boot's Jackson 3 mapper; hitorro-spring-boot-starter 4.0.0 gives it
+  # the JSON format Boot's Jackson 2 mapper had (spring.jackson.use-jackson2-defaults etc.).
   http:
-    converters:
-      preferred-json-mapper: jackson2
     # Bound every outgoing HTTP call (Ollama via Spring AI's RestClient among
     # them): without this an unreachable Ollama hangs the request indefinitely.
     clients:

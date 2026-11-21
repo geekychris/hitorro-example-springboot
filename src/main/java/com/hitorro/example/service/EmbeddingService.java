@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import com.hitorro.util.json.JsonValues;
 
 /**
  * Service for generating embeddings using Ollama.
@@ -191,11 +192,11 @@ public class EmbeddingService {
             return (String) obj;
         }
         
-        if (obj instanceof com.fasterxml.jackson.databind.JsonNode) {
-            com.fasterxml.jackson.databind.JsonNode node = (com.fasterxml.jackson.databind.JsonNode) obj;
+        if (obj instanceof tools.jackson.databind.JsonNode) {
+            tools.jackson.databind.JsonNode node = (tools.jackson.databind.JsonNode) obj;
             
-            if (node.isTextual()) {
-                return node.asText();
+            if (node.isString()) {
+                return JsonValues.asText(node);
             }
             
             // Handle MLS structures: { "mls": [ { "lang": "en", "text": "...", "clean": "..." } ] }
@@ -209,7 +210,7 @@ public class EmbeddingService {
             }
             
             // For other complex nodes, try asText (may return empty string)
-            String text = node.asText();
+            String text = JsonValues.asText(node);
             return text.isEmpty() ? null : text;
         }
         
@@ -225,7 +226,7 @@ public class EmbeddingService {
      * - Array: {"mls": [{"lang": "en", "clean": "..."}]}
      * - Object: {"mls": {"clean": "...", "segmented": "..."}}
      */
-    private String extractFromMLS(com.fasterxml.jackson.databind.JsonNode mlsNode) {
+    private String extractFromMLS(tools.jackson.databind.JsonNode mlsNode) {
         if (mlsNode == null) {
             return null;
         }
@@ -236,15 +237,15 @@ public class EmbeddingService {
             
             // Prefer 'clean' field (has clean text without extra formatting)
             if (mlsNode.has("clean")) {
-                text = mlsNode.get("clean").asText();
+                text = JsonValues.asText(mlsNode.get("clean"));
             }
             // Fall back to 'text' field
             else if (mlsNode.has("text")) {
-                text = mlsNode.get("text").asText();
+                text = JsonValues.asText(mlsNode.get("text"));
             }
             // Fall back to 'segmented' if available
             else if (mlsNode.has("segmented")) {
-                text = mlsNode.get("segmented").asText();
+                text = JsonValues.asText(mlsNode.get("segmented"));
             }
             
             return (text != null && !text.trim().isEmpty()) ? text.trim() : null;
@@ -257,21 +258,21 @@ public class EmbeddingService {
         
         StringBuilder combined = new StringBuilder();
         
-        for (com.fasterxml.jackson.databind.JsonNode item : mlsNode) {
+        for (tools.jackson.databind.JsonNode item : mlsNode) {
             if (item.isObject()) {
                 String text = null;
                 
                 // Prefer 'clean' field (has clean text without extra formatting)
                 if (item.has("clean")) {
-                    text = item.get("clean").asText();
+                    text = JsonValues.asText(item.get("clean"));
                 }
                 // Fall back to 'text' field
                 else if (item.has("text")) {
-                    text = item.get("text").asText();
+                    text = JsonValues.asText(item.get("text"));
                 }
                 // Fall back to 'segmented' if available
                 else if (item.has("segmented")) {
-                    text = item.get("segmented").asText();
+                    text = JsonValues.asText(item.get("segmented"));
                 }
                 
                 if (text != null && !text.trim().isEmpty()) {

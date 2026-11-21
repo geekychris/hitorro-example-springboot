@@ -21,8 +21,8 @@
  */
 package com.hitorro.example.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.basedms.transformer.ai.AIService;
 import com.hitorro.basedms.transformer.ai.AIServiceRegistry;
 import com.hitorro.jsontypesystem.JVS;
@@ -40,7 +40,7 @@ import java.util.*;
 public class MLSTranslationService {
     
     private static final Logger logger = LoggerFactory.getLogger(MLSTranslationService.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
     
     /**
      * Supported language codes with their display names

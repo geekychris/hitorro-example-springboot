@@ -1,8 +1,8 @@
 package com.hitorro.example.boot4;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import com.hitorro.example.config.H2ConsoleConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,17 +19,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Spring Boot 4 writes HTTP JSON with Jackson 3 by default, which would write a Jackson 2
- * (com.fasterxml.jackson) JsonNode as a dump of its getters. The app sets
- * spring.http.converters.preferred-json-mapper=jackson2 (application.yml); these tests
- * prove JsonNode, ObjectNode, and maps holding JsonNodes (the controllers' usual
- * {@code Map<String, Object>} response) come out as plain JSON, through the app's
- * configuration and security filter chain.
+ * HiTorro 4.0.0 and Spring Boot 4 are both on Jackson 3, and the app no longer uses the Jackson 2
+ * bridge (preferred-json-mapper=jackson2 is gone). These tests prove JsonNode, ObjectNode, and maps
+ * holding JsonNodes (the controllers' usual {@code Map<String, Object>} response) come out as plain
+ * JSON through Boot's Jackson 3 mapper, which hitorro-spring-boot-starter gives the Jackson 2 format,
+ * through the app's configuration and security filter chain.
  */
 @WebMvcTest(JsonNodeResponseTest.JsonNodeController.class)
 @Import({JsonNodeResponseTest.JsonNodeController.class, H2ConsoleConfig.class})
@@ -42,8 +42,10 @@ class JsonNodeResponseTest {
     private Environment environment;
 
     @Test
-    void applicationPrefersJackson2() {
-        assertEquals("jackson2", environment.getProperty("spring.http.converters.preferred-json-mapper"));
+    void jackson2BridgeIsGoneAndBootsMapperHasTheJackson2Format() {
+        assertNull(environment.getProperty("spring.http.converters.preferred-json-mapper"));
+        assertEquals("true", environment.getProperty("spring.jackson.use-jackson2-defaults"),
+                "the starter's default (HitorroEnvironmentPostProcessor)");
     }
 
     @Test
@@ -68,7 +70,7 @@ class JsonNodeResponseTest {
     @RestController
     static class JsonNodeController {
 
-        private final ObjectMapper mapper = new ObjectMapper();
+        private final ObjectMapper mapper = com.hitorro.util.json.JsonMappers.json();
 
         @GetMapping("/api/boot4-test/object-node")
         ObjectNode objectNode() {

@@ -21,7 +21,7 @@
  */
 package com.hitorro.example.springboot;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.JsonTypeSystem;
 import com.hitorro.spring.autoconfigure.jvs.JsonTypeSystemManager;
@@ -718,8 +718,8 @@ public class HitorroJVSIntegrationTest {
                         // "NE_person NE_person O O NE_person NE_person O NE_location"
                         System.out.println("  NER-enriched sentences:");
                         for (JsonNode sentence : nerNode) {
-                            if (sentence != null && sentence.isTextual()) {
-                                String markedUp = sentence.asText();
+                            if (sentence != null && sentence.isString()) {
+                                String markedUp = sentence.asString();
                                 System.out.println("    " + markedUp);
                                 
                                 // Count entity mentions in this sentence
@@ -844,9 +844,9 @@ public class HitorroJVSIntegrationTest {
                     for (JsonNode wordTagPair : posNode) {
                         if (wordTagPair != null && wordTagPair.isObject()) {
                             // Each object has one field: word -> tag
-                            var entry = wordTagPair.fields().next();
+                            var entry = wordTagPair.properties().iterator().next();
                             String word = entry.getKey();
-                            String tag = entry.getValue().asText();
+                            String tag = entry.getValue().asString();
                             
                             if (displayed < 5) {
                                 System.out.println("    " + word + " -> " + tag);
@@ -958,8 +958,8 @@ public class HitorroJVSIntegrationTest {
                 if (ner != null && ner.isArray() && ner.size() > 0) {
                     System.out.println("\n5. NER Markup (" + ner.size() + " sentences with entity markup):");
                     for (JsonNode sentence : ner) {
-                        if (sentence != null && sentence.isTextual()) {
-                            System.out.println("   " + sentence.asText());
+                        if (sentence != null && sentence.isString()) {
+                            System.out.println("   " + sentence.asString());
                         }
                     }
                 }
@@ -981,8 +981,8 @@ public class HitorroJVSIntegrationTest {
                     for (JsonNode wordTagPair : pos) {
                         if (wordTagPair != null && wordTagPair.isObject()) {
                             // Each object has one field: word -> tag
-                            wordTagPair.fields().forEachRemaining(entry -> {
-                                System.out.println("   " + entry.getKey() + " -> " + entry.getValue().asText());
+                            wordTagPair.properties().iterator().forEachRemaining(entry -> {
+                                System.out.println("   " + entry.getKey() + " -> " + entry.getValue().asString());
                             });
                             count++;
                             if (count >= 10) {

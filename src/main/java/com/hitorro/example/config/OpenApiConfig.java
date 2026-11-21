@@ -21,7 +21,12 @@
  */
 package com.hitorro.example.config;
 
+import io.swagger.v3.core.converter.AnnotatedType;
+import io.swagger.v3.core.converter.ModelConverter;
+import io.swagger.v3.core.converter.ModelConverterContext;
+import io.swagger.v3.core.util.Json;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
@@ -29,6 +34,7 @@ import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -42,6 +48,28 @@ import java.util.List;
  */
 @Configuration
 public class OpenApiConfig {
+
+    /**
+     * swagger-core knows Jackson 2's {@code JsonNode} (documented as the free-form {@code JsonNode}
+     * schema, {@code {}}) but not Jackson 3's, which it would document as a bean with the node's
+     * getters ({@code array}, {@code empty}, {@code null}, ...). Keep the API docs as they were: any
+     * Jackson 3 {@code JsonNode} is a reference to an empty {@code JsonNode} schema.
+     */
+    @Bean
+    public ModelConverter jackson3JsonNodeSchema() {
+        return new ModelConverter() {
+            @Override
+            @SuppressWarnings("rawtypes")
+            public Schema resolve(AnnotatedType type, ModelConverterContext context, Iterator<ModelConverter> chain) {
+                Class<?> raw = type.getType() == null ? null : Json.mapper().constructType(type.getType()).getRawClass();
+                if (raw != null && tools.jackson.databind.JsonNode.class.isAssignableFrom(raw)) {
+                    context.defineModel("JsonNode", new Schema<>());
+                    return new Schema<>().$ref("#/components/schemas/JsonNode");
+                }
+                return chain.hasNext() ? chain.next().resolve(type, context, chain) : null;
+            }
+        };
+    }
     
     @Bean
     public OpenAPI hitorroExampleOpenAPI() {

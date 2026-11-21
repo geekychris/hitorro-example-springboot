@@ -21,8 +21,8 @@
  */
 package com.hitorro.example.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.example.service.MLSTranslationService;
 import com.hitorro.example.service.MLSTranslationService.TranslationResult;
 import com.hitorro.jsontypesystem.JVS;
@@ -49,7 +49,7 @@ import java.util.Map;
 public class TranslationController {
     
     private static final Logger logger = LoggerFactory.getLogger(TranslationController.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
     
     private final MLSTranslationService translationService;
     

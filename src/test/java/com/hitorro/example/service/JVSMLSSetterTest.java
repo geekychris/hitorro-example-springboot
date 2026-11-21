@@ -21,7 +21,7 @@
  */
 package com.hitorro.example.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.spring.autoconfigure.jvs.JsonTypeSystemManager;
 import org.junit.jupiter.api.BeforeEach;

@@ -21,7 +21,7 @@
  */
 package com.hitorro.example.springboot;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.base.objects.*;
 import com.hitorro.basedms.StoreUtil;
 import com.hitorro.basedms.cache.ContentTypeCache;

@@ -21,10 +21,10 @@
  */
 package com.hitorro.example.playground;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import com.hitorro.jsontypesystem.BaseT;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.JVSValidator;
@@ -98,7 +98,7 @@ import java.util.function.Predicate;
 public class PlaygroundController {
 
 	private static final Logger logger = LoggerFactory.getLogger(PlaygroundController.class);
-	private static final ObjectMapper objectMapper = new ObjectMapper();
+	private static final ObjectMapper objectMapper = com.hitorro.util.json.JsonMappers.json();
 
 	// A demo_document variant with every projection group and constraint attached to at least one
 	// field. Kept in one place so the UI can display it and users can copy/paste to tweak.
